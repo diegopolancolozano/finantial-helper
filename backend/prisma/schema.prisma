@@ -1,0 +1,77 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  passwordHash String
+  refreshToken String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  movements    Movement[]
+  categories   Category[]
+  budgets      Budget[]
+
+  @@map("users")
+}
+
+model Movement {
+  id          String       @id @default(uuid())
+  type        MovementType
+  amount      Decimal      @db.Decimal(15, 2)
+  description String
+  date        DateTime
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId  String
+  category    Category     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([userId, date])
+  @@index([userId, type])
+  @@map("movements")
+}
+
+model Category {
+  id        String     @id @default(uuid())
+  name      String
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  movements Movement[]
+  budgets   Budget[]
+
+  @@unique([userId, name])
+  @@map("categories")
+}
+
+model Budget {
+  id         String   @id @default(uuid())
+  amount     Decimal  @db.Decimal(15, 2)
+  month      Int
+  year       Int
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, month, year])
+  @@index([userId, month, year])
+  @@map("budgets")
+}
+
+enum MovementType {
+  income
+  expense
+}
