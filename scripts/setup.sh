@@ -43,11 +43,12 @@ gcloud artifacts repositories describe "$AR_REPO" \
        --description="Financial Helper — imágenes Docker"
 
 # ── Cloud SQL ────────────────────────────────────────────────────────────────
-echo "[3/6] Cloud SQL (db-f1-micro, PostgreSQL 16)..."
+echo "[3/6] Cloud SQL (db-f1-micro Enterprise, PostgreSQL 16)..."
 gcloud sql instances describe "$DB_INSTANCE" --quiet 2>/dev/null \
   || gcloud sql instances create "$DB_INSTANCE" \
        --database-version=POSTGRES_16 \
        --tier=db-f1-micro \
+       --edition=ENTERPRISE \
        --region="$REGION" \
        --quiet
 
