@@ -105,7 +105,13 @@ describe('Financial Helper (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/api/movements')
         .set('Authorization', `Bearer ${token}`)
-        .send({ type: 'expense', amount: 50000, description: 'Almuerzo', categoryId, date: '2026-06-21' })
+        .send({
+          type: 'expense',
+          amount: 50000,
+          description: 'Almuerzo',
+          categoryId,
+          date: '2026-06-21',
+        })
         .expect(201);
       expect(res.body.movement).toHaveProperty('id');
       expect(res.body.budgetAlert).toBeNull();
@@ -170,7 +176,13 @@ describe('Financial Helper (e2e)', () => {
       const res = await request(app.getHttpServer())
         .post('/api/movements')
         .set('Authorization', `Bearer ${token}`)
-        .send({ type: 'expense', amount: 85000, description: 'Mercado', categoryId, date: '2026-06-22' })
+        .send({
+          type: 'expense',
+          amount: 85000,
+          description: 'Mercado',
+          categoryId,
+          date: '2026-06-22',
+        })
         .expect(201);
       expect(res.body.budgetAlert).not.toBeNull();
       expect(res.body.budgetAlert.level).toBe('warning');
