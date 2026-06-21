@@ -15,7 +15,7 @@ fi
 source "$ENV_FILE"
 
 CLOUD_SQL_CONN="${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
-DB_URL="postgresql://${DB_USER}:${DB_PASS}@/${DB_NAME}?host=/cloudsql/${CLOUD_SQL_CONN}"
+DB_URL="postgresql://${DB_USER}:${DB_PASS}@localhost/${DB_NAME}?host=/cloudsql/${CLOUD_SQL_CONN}"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
 echo "=== Financial Helper — Setup en GCP ==="
