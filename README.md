@@ -317,18 +317,6 @@ push a main / pull request
         └── Actualiza CORS del backend con URL del frontend
 ```
 
-### Habilitar el deploy automático
-
-El job `deploy` tiene un guardián de seguridad para evitar fallos cuando los secretos de GCP aún no están configurados:
-
-```
-GitHub repo → Settings → Variables → Actions → New repository variable
-  Nombre: GCP_DEPLOY_ENABLED
-  Valor:  true
-```
-
-Mientras esta variable no esté en `true`, el job `deploy` se omite silenciosamente y el pipeline reporta verde solo con CI.
-
 ### Secretos de GitHub Actions requeridos
 
 Configurar en `Settings → Secrets → Actions`:
