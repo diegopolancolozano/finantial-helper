@@ -134,3 +134,79 @@ jobs:
         run: |
           bun install --frozen-lockfile
           bun run build
+
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ secrets.GCP_REGION }}
+      AR_REPO: ${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_AR_REPO }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      # ── Backend ──────────────────────────────────────────────
+      - name: Build & push backend image
+        run: |
+          IMAGE=${{ secrets.GCP_REGION }}-docker.pkg.dev/$AR_REPO/backend:${{ github.sha }}
+          docker build -t $IMAGE ./backend
+          docker push $IMAGE
+          echo "BACKEND_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Deploy backend to Cloud Run
+        run: |
+          gcloud run deploy financial-helper-backend \
+            --image $BACKEND_IMAGE \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --add-cloudsql-instances ${{ secrets.GCP_CLOUD_SQL_INSTANCE }} \
+            --update-secrets="DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest" \
+            --set-env-vars="NODE_ENV=production,JWT_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,BCRYPT_ROUNDS=12"
+
+      - name: Get backend URL
+        id: backend
+        run: |
+          URL=$(gcloud run services describe financial-helper-backend \
+            --region $REGION --format='value(status.url)')
+          echo "url=$URL" >> $GITHUB_OUTPUT
+
+      # ── Frontend ─────────────────────────────────────────────
+      - name: Build & push frontend image
+        run: |
+          IMAGE=${{ secrets.GCP_REGION }}-docker.pkg.dev/$AR_REPO/frontend:${{ github.sha }}
+          docker build -t $IMAGE ./frontend
+          docker push $IMAGE
+          echo "FRONTEND_IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      - name: Deploy frontend to Cloud Run
+        run: |
+          gcloud run deploy financial-helper-frontend \
+            --image $FRONTEND_IMAGE \
+            --region $REGION \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 3000 \
+            --set-env-vars="NEXT_PUBLIC_API_URL=${{ steps.backend.outputs.url }}"
+
+      - name: Update backend CORS with frontend URL
+        run: |
+          FRONTEND_URL=$(gcloud run services describe financial-helper-frontend \
+            --region $REGION --format='value(status.url)')
+          gcloud run services update financial-helper-backend \
+            --region $REGION \
+            --update-env-vars="FRONTEND_URL=$FRONTEND_URL"

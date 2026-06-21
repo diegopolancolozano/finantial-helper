@@ -28,7 +28,7 @@ services:
       PORT: 8080
       NODE_ENV: development
       BCRYPT_ROUNDS: 10
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: http://localhost:4321
     ports:
       - "8080:8080"
     depends_on:
