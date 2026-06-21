@@ -148,7 +148,7 @@ describe('Financial Helper (e2e)', () => {
       await request(app.getHttpServer())
         .delete(`/api/movements/${movementId}`)
         .set('Authorization', `Bearer ${token}`)
-        .expect(200);
+        .expect(204);
     });
   });
 
