@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { movements as movApi, categories as catApi } from '@/lib/api';
-import type { Movement, Category, MovementFilters, BudgetAlert } from '@/lib/types';
+import type { Movement, Category, MovementFilters, BudgetAlert, MovementType } from '@/lib/types';
 
 function fmt(n: number) {
   return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(n);
 }
 
-const EMPTY_FORM = { type: 'expense' as const, amount: '', description: '', categoryId: '', date: new Date().toISOString().slice(0, 10) };
+const EMPTY_FORM = { type: 'expense' as MovementType, amount: '', description: '', categoryId: '', date: new Date().toISOString().slice(0, 10) };
 
 export default function MovementsPage() {
   const [data, setData] = useState<Movement[]>([]);
