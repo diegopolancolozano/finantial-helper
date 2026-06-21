@@ -10,7 +10,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN node_modules/.bin/prisma generate
 RUN node_modules/.bin/tsc -p tsconfig.build.json
-RUN test -f dist/main.js || (echo "BUILD FAILED: dist/main.js not found. Contents of dist/:" && ls -la dist/ 2>/dev/null && exit 1)
+RUN test -f dist/main.js || (echo "BUILD FAILED: dist/main.js not found" && find /app/dist -name "*.js" 2>/dev/null | head -20 && exit 1)
 
 FROM node:22-slim AS runner
 WORKDIR /app
