@@ -142,14 +142,15 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     env:
-      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-      REGION: ${{ secrets.GCP_REGION }}
-      AR_REPO: ${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_AR_REPO }}
+      PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+      REGION: ${{ vars.GCP_REGION }}
+      AR_REPO: ${{ vars.GCP_PROJECT_ID }}/${{ vars.GCP_AR_REPO }}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
     steps:
       - uses: actions/checkout@v4
 
+      # GCP_SA_KEY debe estar en Secrets (pestaña Secrets, no Variables)
       - uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
@@ -157,12 +158,12 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for Artifact Registry
-        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+        run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
 
       # ── Backend ──────────────────────────────────────────────
       - name: Build & push backend image
         run: |
-          IMAGE=${{ secrets.GCP_REGION }}-docker.pkg.dev/$AR_REPO/backend:${{ github.sha }}
+          IMAGE=${{ vars.GCP_REGION }}-docker.pkg.dev/$AR_REPO/backend:${{ github.sha }}
           docker build -t $IMAGE ./backend
           docker push $IMAGE
           echo "BACKEND_IMAGE=$IMAGE" >> $GITHUB_ENV
@@ -175,7 +176,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --port 8080 \
-            --add-cloudsql-instances ${{ secrets.GCP_CLOUD_SQL_INSTANCE }} \
+            --add-cloudsql-instances ${{ vars.GCP_CLOUD_SQL_INSTANCE }} \
             --update-secrets="DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest" \
             --set-env-vars="NODE_ENV=production,JWT_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,BCRYPT_ROUNDS=12"
 
@@ -189,7 +190,7 @@ jobs:
       # ── Frontend ─────────────────────────────────────────────
       - name: Build & push frontend image
         run: |
-          IMAGE=${{ secrets.GCP_REGION }}-docker.pkg.dev/$AR_REPO/frontend:${{ github.sha }}
+          IMAGE=${{ vars.GCP_REGION }}-docker.pkg.dev/$AR_REPO/frontend:${{ github.sha }}
           docker build -t $IMAGE ./frontend
           docker push $IMAGE
           echo "FRONTEND_IMAGE=$IMAGE" >> $GITHUB_ENV
