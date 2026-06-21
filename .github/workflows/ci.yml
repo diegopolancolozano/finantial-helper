@@ -139,12 +139,20 @@ jobs:
     name: Deploy to Cloud Run
     runs-on: ubuntu-latest
     needs: [build]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Solo corre en push a main Y cuando GCP_DEPLOY_ENABLED = true
+    # (GitHub Variable en Settings → Variables → Actions)
+    if: >
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'push' &&
+      vars.GCP_DEPLOY_ENABLED == 'true'
 
     env:
       PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       REGION: ${{ secrets.GCP_REGION }}
       AR_REPO: ${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_AR_REPO }}
+      # Permite que google-github-actions use Node 20 internamente mientras
+      # actualizan sus actions a Node 24
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
     steps:
       - uses: actions/checkout@v4
