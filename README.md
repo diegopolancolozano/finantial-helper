@@ -1,81 +1,87 @@
 # Financial Helper
 
-Módulo de gestión de movimientos financieros personales desarrollado como parte de una prueba técnica para una fintech colombiana. El producto está orientado a un contexto MVP real: código listo para revisión de pares, análisis de calidad automatizado y despliegue continuo.
+Módulo de gestión de movimientos financieros personales desarrollado como prueba técnica para una fintech colombiana. El producto está orientado a un contexto MVP real: código listo para revisión de pares, análisis de calidad automatizado y despliegue continuo en la nube.
 
 ## Tabla de contenidos
 
-- [Stack tecnológico y justificación](#stack-tecnológico-y-justificación)
+- [Stack y justificación de decisiones](#stack-y-justificación-de-decisiones)
 - [Arquitectura](#arquitectura)
 - [Requisitos previos](#requisitos-previos)
-- [Configuración y variables de entorno](#configuración-y-variables-de-entorno)
-- [Inicio rápido](#inicio-rápido)
-- [Credenciales por defecto](#credenciales-por-defecto)
-- [Estructura del proyecto](#estructura-del-proyecto)
-- [Módulos funcionales](#módulos-funcionales)
+- [Variables de entorno](#variables-de-entorno)
+- [Ejecución local](#ejecución-local)
 - [Tests](#tests)
-- [CI/CD y calidad de código](#cicd-y-calidad-de-código)
-- [URL de despliegue](#url-de-despliegue)
-- [Pendientes y decisiones de ambigüedad](#pendientes-y-decisiones-de-ambigüedad)
+- [CI/CD](#cicd)
+- [Despliegue en GCP (Cloud Run)](#despliegue-en-gcp-cloud-run)
+- [Módulos funcionales y decisiones de diseño](#módulos-funcionales-y-decisiones-de-diseño)
 - [AI Usage](#ai-usage)
 
 ---
 
-## Stack tecnológico y justificación
+## Stack y justificación de decisiones
 
 Las decisiones de stack se tomaron considerando tres factores: **seguridad**, **mantenibilidad** y **velocidad de entrega** en un contexto financiero.
 
-### Backend — NestJS (Node.js + TypeScript)
+### Backend — NestJS + TypeScript
 
-NestJS impone una arquitectura modular basada en principios SOLID desde el inicio: módulos, controladores, servicios y repositorios están separados por diseño, no por convención. Esto es especialmente valioso en una fintech donde los dominios (autenticación, movimientos, presupuestos) deben estar aislados para facilitar auditorías y cumplimiento regulatorio.
+NestJS impone una arquitectura modular basada en principios SOLID desde el inicio: módulos, controladores, servicios e inyección de dependencias están separados por diseño, no por convención. Esto es especialmente valioso en una fintech donde los dominios (autenticación, movimientos, presupuestos) deben estar aislados para facilitar auditorías.
 
-El sistema de **guards** y **decoradores** de NestJS permite implementar autenticación y autorización de forma declarativa (`@UseGuards(JwtAuthGuard)`), reduciendo la probabilidad de olvidar proteger un endpoint. En un producto financiero, un endpoint desprotegido por error es un riesgo crítico.
+El sistema de **guards** y **decoradores** permite implementar autenticación de forma declarativa (`@UseGuards(JwtAuthGuard)`), reduciendo la probabilidad de olvidar proteger un endpoint. En un producto financiero, un endpoint desprotegido por descuido es un riesgo crítico.
 
-TypeScript en el backend agrega tipado estricto que detecta errores de lógica financiera en tiempo de compilación, antes de que lleguen a producción.
+El candidato cuenta con experiencia práctica en NestJS adquirida a través de cursos especializados.
 
-El candidato cuenta con experiencia práctica en NestJS adquirida a través de cursos especializados, lo que reduce la deuda técnica por desconocimiento de la plataforma.
+### Frontend — Next.js 15 + TypeScript
 
-### Frontend — Next.js (React + TypeScript)
+Next.js permite colocar la lógica de presentación en el mismo repositorio con una experiencia de desarrollo cohesiva. El **App Router** de Next.js 15 y el patrón de **route groups** (`(auth)`, `(app)`) permiten separar las rutas protegidas de las públicas a nivel de sistema de archivos, sin necesidad de lógica adicional de enrutamiento.
 
-Next.js permite colocar la lógica de presentación y las llamadas a API en el mismo repositorio con una experiencia de desarrollo cohesiva. El App Router de Next.js 15 habilita **Server Components** para reducir el JavaScript enviado al cliente y **Route Handlers** para casos donde el frontend necesita actuar como BFF (Backend for Frontend).
+El frontend actúa como un cliente puro: todas las llamadas van a `/api/*` localmente, que Next.js proxea al backend mediante `rewrites` en `next.config.ts`. Esto evita problemas de CORS en desarrollo y permite cambiar la URL del backend sin modificar el código cliente.
 
-Para un módulo financiero personal, el rendering del lado del servidor mejora la percepción de rendimiento en conexiones lentas, que es la realidad de muchos usuarios en Colombia.
-
-El candidato tiene experiencia con Next.js y React a través de formación en cursos, lo que garantiza dominio del modelo mental de hidratación y del sistema de rutas.
+El candidato tiene experiencia con Next.js a través de formación en cursos.
 
 ### Base de datos — PostgreSQL 16
 
-PostgreSQL es la única opción técnicamente justificable para datos financieros:
+PostgreSQL es la opción técnicamente correcta para datos financieros por las siguientes razones:
 
-- **ACID completo**: atomicidad, consistencia, aislamiento y durabilidad garantizados. En una transacción financiera que involucra múltiples escrituras (movimiento + actualización de balance + verificación de presupuesto), o todo se guarda o nada se guarda.
-- **Transacciones robustas**: si el proceso falla entre operaciones relacionadas, PostgreSQL hace rollback automático. MongoDB en modo de escritura eventual puede dejar el estado inconsistente.
-- **Consultas complejas**: los filtros por rango de fechas, agrupaciones por categoría y cálculos de balance se expresan naturalmente en SQL con índices parciales y funciones de ventana.
+- **ACID completo**: atomicidad, consistencia, aislamiento y durabilidad garantizados. En operaciones que involucran múltiples escrituras (movimiento + verificación de presupuesto), o todo se persiste o nada se persiste.
 - **Integridad referencial**: las foreign keys con `ON DELETE RESTRICT` previenen huérfanos en datos financieros (un movimiento sin usuario válido, una categoría sin dueño).
+- **Tipos de dato precisos**: `DECIMAL(15,2)` para montos financieros evita los errores de redondeo de punto flotante que son inaceptables en contextos de dinero.
+- **Consultas complejas**: filtros por rango de fechas, agrupaciones por categoría y cálculos de balance se expresan naturalmente en SQL con índices compuestos.
 
-MongoDB no se consideró porque su modelo de consistencia eventual y la ausencia de transacciones multi-documento en configuraciones sin replica set introduce riesgos inaceptables para un producto financiero.
+MongoDB no se consideró porque su modelo de consistencia eventual introduce riesgos inaceptables para un producto financiero.
 
 ### ORM — Prisma
 
-Prisma genera tipos TypeScript directamente del esquema de base de datos, haciendo imposible escribir una query que acceda a un campo que no existe. Las migraciones son versionadas y reproducibles, lo que es fundamental para un pipeline CI/CD que necesita reconstruir la base de datos desde cero en cada ejecución de tests.
+Prisma genera tipos TypeScript directamente del esquema, haciendo imposible escribir una query que acceda a un campo inexistente. Las migraciones son versionadas y reproducibles, fundamental para el pipeline CI/CD que reconstruye la base de datos desde cero en cada ejecución de tests E2E.
 
-### Autenticación — JWT con Access + Refresh Token
+**Decisión sobre tipos decimales**: Prisma mapea `Decimal @db.Decimal(15,2)` al tipo `Decimal` de `@prisma/client/runtime/library`, no a `number`. Esto obliga a hacer la conversión explícita (`Number(amount)`) al serializar, lo que previene pérdida de precisión silenciosa.
 
-Access token de corta duración (15 minutos) + refresh token de larga duración (7 días) almacenado en cookie HttpOnly. Este modelo cumple con el requerimiento de sesión segura y controlada:
+### Package manager — Bun 1.2
+
+Bun se eligió sobre npm/pnpm por su velocidad de instalación (3-5× más rápido) y compatibilidad con el ecosistema Node.js. Los scripts de `package.json` usan `bunx` en lugar de `npx` porque Bun no añade `node_modules/.bin` al PATH de la misma forma que npm, lo que causaba `command not found: next` en el frontend.
+
+### Autenticación — JWT (Access + Refresh Token)
+
+Access token de corta duración (15 min) + refresh token de larga duración (7 días) en cookie HttpOnly. Este modelo cumple el requerimiento de sesión segura:
 
 - El access token expira rápido, limitando la ventana de exposición si es interceptado.
-- La cookie HttpOnly previene acceso desde JavaScript (mitigación de XSS).
-- El refresh token permite renovar la sesión sin que el usuario vuelva a autenticarse cada 15 minutos.
+- La cookie `HttpOnly + SameSite=Strict` previene acceso desde JavaScript (mitigación de XSS) y ataques CSRF.
+- El refresh token se almacena **hasheado con bcrypt** en la base de datos. Si la DB se filtra, los tokens quedan inutilizables. Al logout, el hash se elimina, invalidando la sesión inmediatamente.
+- Mismo mensaje de error para "email no existe" y "contraseña incorrecta" (`Credenciales inválidas`) para evitar enumeración de usuarios.
 
-### Contenedores — Docker Compose
+### Contenedores — Docker + Docker Compose
 
-Un solo archivo `docker-compose.yml` levanta PostgreSQL, el backend NestJS y el frontend Next.js. Esto cumple el requerimiento de "un comando levanta todo" y garantiza que el entorno de desarrollo sea idéntico al de producción.
+`docker-compose.yml` levanta PostgreSQL y el backend con un solo comando. El backend declara `depends_on` con healthcheck sobre PostgreSQL para evitar race conditions al iniciar. El frontend se desarrolla localmente sin contenedor para mantener el ciclo de feedback rápido (hot reload).
 
 ### CI/CD — GitHub Actions
 
-Pipeline con tres jobs: `test` (unit + integration), `lint` (ESLint + Prettier) y `quality` (análisis estático con SonarCloud). El job de calidad bloquea el merge si la cobertura cae por debajo del umbral o si hay code smells críticos.
+Pipeline con 5 jobs que garantiza calidad antes de cada deploy. Ver sección [CI/CD](#cicd).
 
-### Análisis de calidad — SonarCloud + ESLint
+### Cloud — GCP Cloud Run
 
-SonarCloud detecta vulnerabilidades de seguridad (hardcoded secrets, SQL injection patterns, dependencias con CVEs), duplicación de código y complejidad ciclomática. ESLint con reglas de seguridad (`no-eval`, `no-implied-eval`) actúa como primera barrera en cada commit.
+Cloud Run se eligió sobre Compute Engine y GKE por:
+
+- **Compute Engine (VM)**: requiere administrar el sistema operativo, parches de seguridad y docker-compose en producción. Genera costos fijos aunque no haya tráfico.
+- **GKE (Kubernetes)**: overkill para un MVP de un solo servicio. La complejidad operativa (cluster, nodes, ingress, manifests) consume tiempo que no genera valor en esta etapa.
+- **Cloud Run**: despliegue serverless de contenedores Docker. Escala a cero cuando no hay tráfico (costo $0 en idle), escala automáticamente ante carga, y el deploy se reduce a `gcloud run deploy`. Se integra nativamente con Cloud SQL mediante el Cloud SQL connector sin necesidad de gestionar VPCs o IPs.
 
 ---
 
@@ -83,34 +89,52 @@ SonarCloud detecta vulnerabilidades de seguridad (hardcoded secrets, SQL injecti
 
 ```
 finantial-helper/
-├── backend/                    # NestJS API REST
+├── backend/                        # NestJS API REST
 │   ├── src/
-│   │   ├── auth/               # JWT, guards, estrategias Passport
-│   │   ├── users/              # Gestión de usuarios
-│   │   ├── movements/          # CRUD de movimientos financieros
-│   │   ├── categories/         # Categorías personalizadas
-│   │   ├── budgets/            # Presupuestos y alertas
-│   │   └── prisma/             # Servicio Prisma + schema
-│   ├── test/                   # Tests e2e
+│   │   ├── auth/                   # JWT, guards, estrategias Passport
+│   │   │   ├── dto/                # RegisterDto, LoginDto
+│   │   │   ├── strategies/         # JwtStrategy (Passport)
+│   │   │   ├── auth.service.ts
+│   │   │   └── auth.controller.ts
+│   │   ├── users/                  # UsersService (acceso a tabla User)
+│   │   ├── movements/              # CRUD de movimientos financieros
+│   │   │   ├── dto/                # CreateMovementDto, FilterMovementsDto
+│   │   │   ├── movements.service.ts
+│   │   │   └── movements.controller.ts
+│   │   ├── categories/             # Categorías con soft delete
+│   │   ├── budgets/                # Presupuestos mensuales y alertas
+│   │   ├── prisma/                 # PrismaService + mock para tests
+│   │   └── common/                 # Guards, decoradores, filtros globales
+│   ├── test/                       # Tests E2E (supertest)
+│   │   ├── app.e2e-spec.ts
+│   │   └── jest-e2e.json
+│   ├── prisma/
+│   │   └── schema.prisma           # Modelos: User, Movement, Category, Budget
+│   ├── eslint.config.mjs           # ESLint 9 flat config
+│   ├── .prettierrc
 │   └── Dockerfile
-├── frontend/                   # Next.js App Router
-│   ├── app/
-│   │   ├── (auth)/             # Login, registro
-│   │   ├── dashboard/          # Balance y resumen
-│   │   ├── movements/          # Listado, filtros, CRUD
-│   │   └── categories/         # Gestión de categorías y presupuestos
-│   ├── components/
-│   ├── lib/                    # Cliente API, hooks, utilidades
+├── frontend/                       # Next.js 15 App Router
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── (auth)/             # /login, /register (rutas públicas)
+│   │   │   └── (app)/              # /dashboard, /movements, /categories
+│   │   └── lib/
+│   │       ├── api.ts              # Cliente fetch centralizado
+│   │       └── types.ts            # Tipos compartidos frontend
 │   └── Dockerfile
-├── docker-compose.yml
-├── docker-compose.prod.yml
+├── scripts/
+│   ├── gcp.env.example             # Plantilla de configuración GCP
+│   ├── setup.sh                    # Crea recursos GCP (una sola vez)
+│   ├── deploy.sh                   # Deploy manual sin push al repo
+│   └── teardown.sh                 # Elimina todos los recursos GCP
 ├── .github/
 │   └── workflows/
-│       └── ci.yml
-└── README.md
+│       └── ci.yml                  # Pipeline CI/CD completo
+├── docker-compose.yml              # Entorno de desarrollo local
+└── .gitignore
 ```
 
-La comunicación entre frontend y backend es exclusivamente a través de la API REST. El frontend no tiene acceso directo a la base de datos. Cada módulo del backend expone únicamente los datos del usuario autenticado (row-level security a nivel de aplicación con validación en cada query).
+**Principio de aislamiento de datos**: cada endpoint filtra por `userId` extraído del JWT. No existe ningún endpoint que devuelva datos de otro usuario. El `JwtAuthGuard` aplica a todos los controladores protegidos vía decorador de clase, eliminando el riesgo de olvidar proteger un método individual.
 
 ---
 
@@ -118,24 +142,20 @@ La comunicación entre frontend y backend es exclusivamente a través de la API 
 
 | Herramienta | Versión mínima | Propósito |
 |-------------|---------------|-----------|
-| Node.js | 22.x LTS | Runtime de producción (NestJS build) |
-| Bun | 1.2.x | Package manager y runtime de desarrollo |
-| Docker | 27.x | Contenedores |
+| Bun | 1.2.x | Package manager y runner de scripts |
+| Docker | 27.x | Contenedores locales |
 | Docker Compose | 2.x (plugin) | Orquestación local |
-| Git | 2.x | Control de versiones |
-
-Verificar versiones instaladas:
+| Node.js | 22.x LTS | Runtime del builder de imagen Docker |
 
 ```bash
-node --version    # >= 22.0.0
-bun --version     # >= 1.2.0
-docker --version  # >= 27.0.0
-docker compose version  # >= 2.0.0
+# Verificar versiones
+bun --version          # >= 1.2.0
+docker --version       # >= 27.0.0
+docker compose version # >= 2.0.0
 ```
 
-Instalar Bun (si no está instalado):
-
 ```bash
+# Instalar Bun (si no está instalado)
 # Windows (PowerShell)
 powershell -c "irm bun.sh/install.ps1 | iex"
 
@@ -145,280 +165,370 @@ curl -fsSL https://bun.sh/install | bash
 
 ---
 
-## Configuración y variables de entorno
+## Variables de entorno
 
-### Backend (`backend/.env`)
-
-Copiar el archivo de ejemplo y ajustar los valores:
+### Backend — `backend/.env`
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-| Variable | Descripción | Valor por defecto (desarrollo) |
-|----------|-------------|-------------------------------|
-| `DATABASE_URL` | Cadena de conexión PostgreSQL | `postgresql://fintech:fintech123@localhost:5432/financial_helper` |
-| `JWT_SECRET` | Secreto para firmar access tokens | *(obligatorio, sin valor por defecto)* |
-| `JWT_REFRESH_SECRET` | Secreto para firmar refresh tokens | *(obligatorio, sin valor por defecto)* |
-| `JWT_EXPIRES_IN` | Duración del access token | `15m` |
-| `JWT_REFRESH_EXPIRES_IN` | Duración del refresh token | `7d` |
-| `PORT` | Puerto del servidor NestJS | `3001` |
-| `NODE_ENV` | Entorno de ejecución | `development` |
-| `BCRYPT_ROUNDS` | Rondas de hashing de contraseñas | `12` |
+| Variable | Descripción | Valor desarrollo |
+|----------|-------------|-----------------|
+| `DATABASE_URL` | Conexión PostgreSQL | `postgresql://fintech:fintech123@localhost:5432/financial_helper` |
+| `JWT_SECRET` | Firma de access tokens | *(obligatorio)* |
+| `JWT_REFRESH_SECRET` | Firma de refresh tokens | *(obligatorio)* |
+| `JWT_EXPIRES_IN` | Duración access token | `15m` |
+| `JWT_REFRESH_EXPIRES_IN` | Duración refresh token | `7d` |
+| `PORT` | Puerto del servidor | `8080` |
+| `NODE_ENV` | Entorno | `development` |
+| `BCRYPT_ROUNDS` | Rondas de hash de contraseñas | `12` (4 en tests para velocidad) |
+| `FRONTEND_URL` | URL del frontend para CORS | `http://localhost:4321` |
 
-> **Importante**: `JWT_SECRET` y `JWT_REFRESH_SECRET` deben ser cadenas aleatorias de al menos 64 caracteres. Nunca usar los mismos valores entre entornos.
+> **Nota sobre puertos**: Los puertos 3000 y 3001 están reservados por Hyper-V/WSL en Windows (rango excluido 2970–3169 en muchas configuraciones). El backend usa 8080 y el frontend 4321.
 
 Generar secretos seguros:
 ```bash
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
 ```
 
-### Frontend (`frontend/.env.local`)
-
-```bash
-cp frontend/.env.example frontend/.env.local
-```
-
-| Variable | Descripción | Valor por defecto (desarrollo) |
-|----------|-------------|-------------------------------|
-| `NEXT_PUBLIC_API_URL` | URL base del backend | `http://localhost:3001` |
-
 ---
 
-## Inicio rápido
+## Ejecución local
 
-### Opción A — Docker Compose (recomendado)
-
-Un solo comando levanta PostgreSQL, el backend y el frontend:
+### Con Docker Compose (recomendado)
 
 ```bash
+# Levantar PostgreSQL + backend
 docker compose up --build
-```
 
-La primera ejecución descarga las imágenes base, instala dependencias y ejecuta las migraciones de base de datos automáticamente.
+# En otra terminal, levantar el frontend
+cd frontend && bun install && bun run dev
+```
 
 | Servicio | URL |
 |---------|-----|
 | Frontend | http://localhost:4321 |
-| Backend API | http://localhost:8080 |
+| Backend API | http://localhost:8080/api |
 | PostgreSQL | localhost:5432 |
 
-> **Nota**: Los puertos 3000 y 3001 están reservados por Hyper-V/WSL en Windows (rango excluido 2970–3169). Se usan 8080 y 4321 para evitar conflictos en entornos locales Windows.
-
-Para detener todos los servicios:
-
 ```bash
+# Detener servicios (conserva la base de datos)
 docker compose down
-```
 
-Para detener y eliminar los volúmenes (base de datos):
-
-```bash
+# Detener y eliminar datos
 docker compose down -v
 ```
 
-### Opción B — Desarrollo local sin Docker
+### Sin Docker (desarrollo directo)
 
-Requiere una instancia de PostgreSQL corriendo localmente.
+Requiere PostgreSQL corriendo localmente con usuario `fintech` / contraseña `fintech123` y base de datos `financial_helper`.
 
 ```bash
-# 1. Clonar e instalar dependencias
-git clone <repo-url>
-cd finantial-helper
-
-# 2. Instalar dependencias del backend
+# Terminal 1 — Backend
 cd backend
 bun install
-bunx prisma migrate dev
-bun run prisma:seed    # crea usuario de prueba
+bunx prisma migrate dev   # aplica migraciones
+bun run start:dev          # hot reload
 
-# 3. En otra terminal, instalar dependencias del frontend
+# Terminal 2 — Frontend
 cd frontend
 bun install
-
-# 4. Levantar ambos servicios
-# Terminal 1 (backend):
-cd backend && bun run start:dev
-
-# Terminal 2 (frontend):
-cd frontend && bun run dev
+bun run dev               # http://localhost:4321
 ```
 
----
+### Usuario de prueba
 
-## Credenciales por defecto
-
-El script de seed crea un usuario de prueba para facilitar la evaluación:
+El seed crea un usuario para facilitar la evaluación:
 
 | Campo | Valor |
 |-------|-------|
 | Email | `admin@financial.dev` |
 | Contraseña | `Admin1234!` |
 
-> Las contraseñas de usuarios reales en producción nunca tienen valores por defecto. Este usuario solo existe en entornos de desarrollo (`NODE_ENV=development`).
-
----
-
-## Módulos funcionales
-
-### Módulo 1 — Autenticación
-
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/auth/register` | POST | Registro con email y contraseña |
-| `/auth/login` | POST | Inicio de sesión, retorna tokens |
-| `/auth/refresh` | POST | Renovar access token con refresh token |
-| `/auth/logout` | POST | Invalidar refresh token |
-
-La contraseña se hashea con bcrypt (12 rondas) antes de persistir. El refresh token se almacena hasheado en base de datos para invalidarlo en logout.
-
-### Módulo 2 — Movimientos financieros
-
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/movements` | GET | Listar con paginación, filtros y ordenamiento |
-| `/movements/:id` | GET | Detalle de un movimiento |
-| `/movements` | POST | Crear movimiento |
-| `/movements/:id` | PATCH | Editar movimiento |
-| `/movements/:id` | DELETE | Eliminar movimiento |
-| `/movements/summary` | GET | Balance actual (ingresos - egresos) |
-
-Parámetros de filtrado disponibles en `GET /movements`:
-- `type`: `income` | `expense`
-- `categoryId`: UUID de la categoría
-- `dateFrom` / `dateTo`: rango de fechas (ISO 8601)
-- `page` / `limit`: paginación
-- `sortBy`: `date` | `amount` (default: `date`)
-- `order`: `asc` | `desc` (default: `desc`)
-
-### Módulo 3 — Categorías y presupuestos
-
-| Endpoint | Método | Descripción |
-|----------|--------|-------------|
-| `/categories` | GET | Listar categorías del usuario |
-| `/categories` | POST | Crear categoría |
-| `/categories/:id` | PATCH | Editar categoría |
-| `/categories/:id` | DELETE | Eliminar categoría |
-| `/budgets` | GET | Estado de presupuestos del mes actual |
-| `/budgets/:categoryId` | PUT | Asignar/actualizar presupuesto mensual |
-
-La respuesta de `POST /movements` incluye un campo `budgetAlert` cuando el gasto acumulado en la categoría supera el 80% o el 100% del presupuesto mensual:
-
-```json
-{
-  "movement": { "...": "..." },
-  "budgetAlert": {
-    "categoryId": "uuid",
-    "categoryName": "Alimentación",
-    "budgetAmount": 500000,
-    "spentAmount": 420000,
-    "percentage": 84,
-    "level": "warning"
-  }
-}
+```bash
+cd backend && bun run prisma:seed
 ```
-
-`level` puede ser `"warning"` (≥80%) o `"exceeded"` (≥100%).
 
 ---
 
 ## Tests
 
+### Unitarios (sin base de datos)
+
 ```bash
-# Tests unitarios
 cd backend && bun run test
+```
 
-# Tests con cobertura
+Los servicios se prueban con mocks de Prisma (`prisma.service.mock.ts`). No se mockean las entidades del dominio, solo la capa de persistencia.
+
+```bash
+# Con cobertura
 cd backend && bun run test:cov
+```
 
-# Tests e2e (requiere base de datos de test)
+Umbral mínimo de cobertura: **80% en líneas y funciones** medido únicamente sobre los archivos `*.service.ts` con tests asociados. Los módulos, controladores, DTOs y archivos de infraestructura están excluidos del umbral porque son código de cableado, no lógica de negocio.
+
+### E2E (contra base de datos real)
+
+```bash
 cd backend && bun run test:e2e
 ```
 
-La cobertura mínima aceptada por el pipeline es **80%** en líneas y ramas. Los tests e2e usan una base de datos PostgreSQL separada (`financial_helper_test`) que se crea y destruye en cada ejecución.
+Los tests E2E usan `supertest` para ejercitar la API HTTP completa, incluyendo guards de autenticación, validación de DTOs y respuestas de error. El flujo cubre:
+
+1. Registro e inicio de sesión
+2. Rechazo de requests sin token (401)
+3. CRUD de categorías con validación de conflictos
+4. Creación de movimientos y verificación de alertas de presupuesto
+5. Resumen de balance (ingresos - egresos)
+6. Logout
+
+En CI, el job `test-e2e` levanta un contenedor PostgreSQL 16 como servicio y ejecuta `prisma migrate deploy` antes de los tests, garantizando un entorno limpio en cada ejecución.
 
 ---
 
-## CI/CD y calidad de código
+## CI/CD
 
-El pipeline de GitHub Actions se ejecuta en cada push a `main` y en cada pull request:
+El pipeline en `.github/workflows/ci.yml` se ejecuta en cada push a `main` y en cada pull request.
 
 ```
-push / PR
+push a main / pull request
     │
-    ├── job: lint
-    │       ESLint + Prettier check
+    ├── lint          ESLint 9 + Prettier sobre src/ y test/
     │
-    ├── job: test
-    │       Unit tests + cobertura
-    │       E2E tests contra PostgreSQL (service container)
+    ├── test          Unit tests con cobertura (umbral 80%)
+    │   │             Artefacto: reporte HTML de cobertura
+    │   │
+    │   └── (paralelo con lint)
     │
-    └── job: quality
-            SonarCloud analysis
-            Bloquea si cobertura < 80% o hay issues críticos de seguridad
+    ├── test-e2e      PostgreSQL como service container
+    │                 prisma migrate deploy → 13 tests E2E
+    │
+    ├── build         bun run build (backend) + bunx next build (frontend)
+    │   needs: [lint, test]
+    │
+    └── deploy        Solo en push a main + vars.GCP_DEPLOY_ENABLED == 'true'
+        needs: [build]
+        │
+        ├── Build y push imágenes a Artifact Registry
+        ├── Deploy backend → Cloud Run (con Cloud SQL connector)
+        ├── Deploy frontend → Cloud Run (con URL del backend)
+        └── Actualiza CORS del backend con URL del frontend
 ```
 
-El análisis de SonarCloud está configurado para detectar:
-- Hardcoded credentials
-- SQL injection patterns
-- Dependencias con vulnerabilidades conocidas (CVE)
-- Código duplicado superior al 3%
-- Complejidad ciclomática superior a 10 por función
+### Habilitar el deploy automático
+
+El job `deploy` tiene un guardián de seguridad para evitar fallos cuando los secretos de GCP aún no están configurados:
+
+```
+GitHub repo → Settings → Variables → Actions → New repository variable
+  Nombre: GCP_DEPLOY_ENABLED
+  Valor:  true
+```
+
+Mientras esta variable no esté en `true`, el job `deploy` se omite silenciosamente y el pipeline reporta verde solo con CI.
+
+### Secretos de GitHub Actions requeridos
+
+Configurar en `Settings → Secrets → Actions`:
+
+| Secret | Descripción |
+|--------|-------------|
+| `GCP_PROJECT_ID` | ID del proyecto GCP |
+| `GCP_REGION` | Región (ej: `us-central1`) |
+| `GCP_SA_KEY` | JSON completo de la clave de servicio |
+| `GCP_AR_REPO` | Nombre del repo en Artifact Registry (ej: `finantial-helper`) |
+| `GCP_CLOUD_SQL_INSTANCE` | Conexión SQL (ej: `project:region:instance`) |
 
 ---
 
-## URL de despliegue
+## Despliegue en GCP (Cloud Run)
 
-| Entorno | URL |
-|---------|-----|
-| Frontend (producción) | *(por definir — Vercel / Railway)* |
-| Backend API (producción) | *(por definir — Railway / Render)* |
+### Arquitectura en producción
 
-> Se actualizará con las URLs definitivas antes de la entrega.
+```
+Internet
+    │
+    ├── Cloud Run: financial-helper-frontend  (Next.js, puerto 3000)
+    │       │ proxea /api/* a →
+    │       └── Cloud Run: financial-helper-backend  (NestJS, puerto 8080)
+    │               │ se conecta a →
+    │               └── Cloud SQL: PostgreSQL 16 (via Cloud SQL connector)
+    │                       Secrets: DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET
+    │                       (Secret Manager)
+    └── Artifact Registry: imágenes Docker (backend:sha, frontend:sha)
+```
+
+El backend se conecta a Cloud SQL mediante el **Cloud SQL connector** (flag `--add-cloudsql-instances`), que monta automáticamente un proxy Unix socket en el contenedor. La `DATABASE_URL` usa el formato `?host=/cloudsql/PROJECT:REGION:INSTANCE`, evitando exponer la base de datos a internet.
+
+### Setup inicial (una sola vez)
+
+```bash
+# 1. Copiar y completar la configuración
+cp scripts/gcp.env.example scripts/gcp.env
+# Editar scripts/gcp.env con PROJECT_ID, DB_PASS, etc.
+
+# 2. Crear todos los recursos GCP
+bash scripts/setup.sh
+
+# 3. Agregar el contenido de gcp-key.json como secreto GCP_SA_KEY en GitHub
+# 4. Eliminar la clave del disco
+rm gcp-key.json
+
+# 5. Habilitar el deploy automático (ver sección CI/CD)
+```
+
+`setup.sh` crea: Artifact Registry, Cloud SQL (PostgreSQL 16 en `db-f1-micro`), los secrets en Secret Manager con valores generados aleatoriamente para JWT, y el Service Account con los roles mínimos necesarios.
+
+### Deploy manual
+
+Para desplegar sin hacer push al repo (útil para rollbacks o deploys de emergencia):
+
+```bash
+bash scripts/deploy.sh
+```
+
+El script construye ambas imágenes Docker, las sube a Artifact Registry y despliega backend y frontend en Cloud Run, resolviendo automáticamente el orden correcto (backend primero para obtener su URL, luego frontend, luego actualización de CORS).
+
+### Teardown (eliminar todos los recursos)
+
+```bash
+bash scripts/teardown.sh
+# Pide confirmación escribiendo 'si'
+```
+
+Elimina: servicios Cloud Run, instancia Cloud SQL, repositorio Artifact Registry y los secrets de Secret Manager. El Service Account se conserva por defecto (con instrucciones para eliminarlo manualmente si se requiere).
 
 ---
 
-## Pendientes y decisiones de ambigüedad
+## Módulos funcionales y decisiones de diseño
 
-### Decisiones tomadas ante ambigüedades del enunciado
+### Módulo 1 — Autenticación
 
-**¿Las categorías son globales o por usuario?**
-Se decidió que cada usuario gestiona sus propias categorías. Un producto financiero personal no debe exponer las categorías de un usuario a otro. Esto implica que no hay categorías "sistema" por defecto; el seed crea categorías de muestra vinculadas al usuario de prueba.
+| Endpoint | Método | Auth | Descripción |
+|----------|--------|------|-------------|
+| `/api/auth/register` | POST | ❌ | Registro con email y contraseña |
+| `/api/auth/login` | POST | ❌ | Login, retorna access token + cookie refresh |
+| `/api/auth/refresh` | POST | ❌ | Renueva access token usando cookie |
+| `/api/auth/logout` | POST | ✅ | Invalida refresh token en DB |
 
-**¿El presupuesto es mensual calendario o mensual rolling?**
-Se optó por mensual calendario (enero 1–31, febrero 1–28, etc.) porque es el modelo mental más natural para un usuario personal y es más simple de calcular y auditar.
+**Decisión**: el refresh token va en cookie `HttpOnly + SameSite=Strict` y el access token en el body de la respuesta (localStorage del cliente). Esta separación permite revocar sesiones desde el servidor (logout real) sin exponer el refresh token a JavaScript.
 
-**¿Qué pasa al eliminar una categoría que tiene movimientos?**
-Los movimientos existentes retienen la referencia a la categoría (soft constraint). La categoría se marca como inactiva (`isActive: false`) en lugar de eliminarse físicamente, preservando la integridad del historial financiero. El usuario puede ver los movimientos pasados pero no puede asignar nuevos movimientos a una categoría inactiva.
+### Módulo 2 — Movimientos financieros
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `GET /api/movements` | GET | Lista paginada con filtros |
+| `GET /api/movements/summary` | GET | Balance total (ingresos − egresos) |
+| `GET /api/movements/:id` | GET | Detalle |
+| `POST /api/movements` | POST | Crear (incluye `budgetAlert` en respuesta) |
+| `PATCH /api/movements/:id` | PATCH | Editar |
+| `DELETE /api/movements/:id` | DELETE | Eliminar |
+
+Filtros disponibles en `GET /api/movements`:
+
+| Parámetro | Tipo | Descripción |
+|-----------|------|-------------|
+| `type` | `income \| expense` | Filtrar por tipo |
+| `categoryId` | UUID | Filtrar por categoría |
+| `dateFrom` / `dateTo` | ISO 8601 | Rango de fechas |
+| `page` / `limit` | number | Paginación (default: 1 / 10) |
+| `sortBy` | `date \| amount` | Campo de ordenamiento |
+| `order` | `asc \| desc` | Dirección |
+
+**Decisión sobre `GET /movements/summary` antes de `GET /movements/:id`**: la ruta `/summary` se registra primero en el controlador para evitar que NestJS (y Express internamente) interprete la cadena `"summary"` como un UUID y falle con un error 400 en la validación del `ParseUUIDPipe`.
+
+**Respuesta de alerta en `POST /movements`**:
+
+```json
+{
+  "movement": { "id": "...", "amount": 85000, "type": "expense" },
+  "budgetAlert": {
+    "categoryId": "uuid",
+    "categoryName": "Alimentación",
+    "budgetAmount": 100000,
+    "spentAmount": 85000,
+    "percentage": 85,
+    "level": "warning"
+  }
+}
+```
+
+`level: "warning"` cuando el gasto acumulado es ≥80% del presupuesto mensual. `level: "exceeded"` cuando supera el 100%. `budgetAlert: null` si no hay presupuesto configurado o si el umbral no se alcanza.
+
+### Módulo 3 — Categorías y presupuestos
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `GET /api/categories` | GET | Lista categorías activas del usuario |
+| `POST /api/categories` | POST | Crear categoría |
+| `PATCH /api/categories/:id` | PATCH | Renombrar |
+| `DELETE /api/categories/:id` | DELETE | Soft delete (`isActive: false`) |
+| `GET /api/budgets` | GET | Estado de presupuestos (mes actual por defecto) |
+| `PUT /api/budgets/:categoryId` | PUT | Crear o actualizar presupuesto mensual |
+
+**Decisión sobre soft delete de categorías**: eliminar físicamente una categoría que tiene movimientos históricos rompería la integridad del historial financiero. Se usa `isActive: false` para "eliminar" la categoría visualmente sin perder la referencia en los movimientos pasados. Si el usuario crea una categoría con el mismo nombre que una inactiva, se reactiva en lugar de crear un duplicado.
+
+**Decisión sobre presupuesto mensual calendario**: el presupuesto es por mes calendario (ej: junio 2026 = días 1 al 30), no rolling de 30 días. El modelo calendario es más intuitivo para el usuario final y más simple de auditar.
+
+**Decisión sobre categorías por usuario**: cada usuario gestiona sus propias categorías. No hay categorías "sistema" globales. Esto garantiza privacidad y permite que cada usuario organice sus finanzas según su contexto personal.
+
+### Esquema de base de datos
+
+```
+User          Movement          Category         Budget
+────          ────────          ────────         ──────
+id (uuid)     id (uuid)         id (uuid)        id (uuid)
+email         type (enum)       name             amount (Decimal 15,2)
+passwordHash  amount (15,2)     isActive         month (1–12)
+refreshToken  description       userId → User    year
+              date              @@unique(         userId → User
+              userId → User       userId, name)  categoryId → Category
+              categoryId →      @@index(userId)  @@unique(
+                Category                           categoryId,
+              @@index(userId,                      month, year)
+                date)
+              @@index(userId,
+                type)
+```
+
+Los índices compuestos en `Movement` aceleran las dos consultas más frecuentes: listar movimientos de un usuario ordenados por fecha, y filtrar por tipo (ingresos vs egresos) para el cálculo del balance.
 
 ---
 
 ## AI Usage
 
-### Herramientas utilizadas
+### Herramienta
 
-- **Claude Code (claude-sonnet-4-6)**: asistente principal durante el desarrollo.
+**Claude Code (claude-sonnet-4-6)** — asistente de desarrollo en todas las fases del proyecto.
 
-### Ejemplos concretos de uso
+### Uso representativo
 
-**Ejemplo 1 — Generación del README base**
-
-*Prompt*: "Leete el enunciado, ayudame con la documentación del proyecto. Incluye que tengo experiencia por cursos de estas tecnologías. Stack: Next.js, NestJS, PostgreSQL."
-
-*Resultado*: Claude generó el esqueleto completo del README con secciones de justificación técnica, tabla de variables de entorno y estructura de carpetas. Se usó como punto de partida y se ajustaron los detalles de los endpoints y las decisiones de ambigüedad según el criterio propio del candidato.
-
-**Ejemplo 2 — Estrategia de autenticación**
+**Arquitectura de autenticación**
 
 *Prompt*: "¿Cómo implemento la invalidación de refresh tokens en NestJS con Prisma de forma segura?"
 
-*Resultado*: Claude propuso almacenar el hash del refresh token en la base de datos y compararlo en cada renovación. Se adoptó este enfoque porque es más robusto que una blocklist en memoria que no escala ni persiste entre reinicios del servidor.
+*Resultado*: Claude propuso almacenar el hash bcrypt del refresh token en la base de datos y compararlo en cada renovación. Se adoptó este enfoque porque es más robusto que una blocklist en memoria (no escala entre instancias ni persiste entre reinicios).
 
-### Sugerencia rechazada o modificada
+**Generación de tests unitarios**
 
-**Sugerencia**: Claude recomendó usar `uuid` de Node.js para generar IDs en la aplicación antes de insertar en PostgreSQL.
+*Prompt*: "Genera tests para MovementsService cubriendo paginación, filtros por tipo y fecha, y el flujo de alerta de presupuesto."
 
-**Decisión**: Se rechazó en favor de `gen_random_uuid()` de PostgreSQL (extensión `pgcrypto`) directamente en el schema de Prisma (`@default(uuid())`). La razón técnica es que delegar la generación de IDs a la base de datos garantiza unicidad incluso en escenarios de inserción paralela desde múltiples instancias del backend, sin necesidad de coordinación a nivel de aplicación.
+*Resultado*: Claude generó los mocks de Prisma y los 10 casos de prueba. Se revisó cada aserción contra la implementación real y se ajustaron los valores esperados de `totalExpense` y `balance` en `getSummary` para reflejar el tipo `Decimal` de Prisma.
 
-### Valoración del impacto de la IA
+**Corrección de bugs de CI**
 
-El uso de Claude Code aceleró significativamente la fase de documentación y la toma de decisiones de arquitectura al presentar opciones comparadas con sus trade-offs. Sin embargo, cada decisión final fue revisada contra el contexto específico del producto financiero y los requerimientos del enunciado. La IA funciona mejor como acelerador de ideas que como tomador de decisiones: genera un primer borrador sólido que el desarrollador evalúa, ajusta y en ocasiones descarta con argumentos técnicos propios.
+*Prompt (implícito)*: "ESLint no encuentra config, test:cov sale con código 1, Can't find root directory."
+
+*Resultado*: Claude diagnosticó tres problemas independientes: falta del flat config de ESLint 9, `collectCoverageFrom` demasiado amplio (incluía módulos y DTOs sin tests), y `rootDir` del `jest-e2e.json` apuntando al directorio del config en lugar del directorio raíz del backend.
+
+### Sugerencia rechazada
+
+**Sugerencia**: usar `uuid` de Node.js para generar IDs en la aplicación antes de insertar en PostgreSQL.
+
+**Decisión**: se rechazó en favor de `@default(uuid())` en Prisma (que delega a `gen_random_uuid()` de PostgreSQL). La razón es que delegar la generación de IDs a la base de datos garantiza unicidad incluso en inserción paralela desde múltiples instancias del backend, sin coordinación adicional.
+
+### Valoración
+
+Claude Code aceleró significativamente las fases repetitivas (boilerplate de módulos NestJS, configuración de CI, scripts de despliegue) y fue útil como segunda opinión en decisiones de seguridad. Sin embargo, cada pieza de código fue revisada contra el contexto específico del producto: por ejemplo, la cobertura de tests se ajustó para medir solo la lógica de negocio (servicios), no el código de cableado (módulos, DTOs), reflejando una decisión deliberada sobre qué vale la pena medir.
