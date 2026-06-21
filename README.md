@@ -199,9 +199,11 @@ La primera ejecución descarga las imágenes base, instala dependencias y ejecut
 
 | Servicio | URL |
 |---------|-----|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:3001 |
+| Frontend | http://localhost:4321 |
+| Backend API | http://localhost:8080 |
 | PostgreSQL | localhost:5432 |
+
+> **Nota**: Los puertos 3000 y 3001 están reservados por Hyper-V/WSL en Windows (rango excluido 2970–3169). Se usan 8080 y 4321 para evitar conflictos en entornos locales Windows.
 
 Para detener todos los servicios:
 
