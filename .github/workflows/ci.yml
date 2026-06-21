@@ -158,6 +158,26 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v2
 
+      - name: Validate deploy variables
+        run: |
+          echo "REGION='${REGION}'"
+          echo "PROJECT_ID='${PROJECT_ID}'"
+          echo "AR_REPO='${AR_REPO}'"
+          echo "CLOUD_SQL_INSTANCE='${CLOUD_SQL_INSTANCE}'"
+          MISSING=""
+          [ -z "${REGION}" ]             && MISSING="$MISSING GCP_REGION"
+          [ -z "${PROJECT_ID}" ]         && MISSING="$MISSING GCP_PROJECT_ID"
+          [ -z "${AR_REPO}" ]            && MISSING="$MISSING GCP_AR_REPO"
+          [ -z "${CLOUD_SQL_INSTANCE}" ] && MISSING="$MISSING GCP_CLOUD_SQL_INSTANCE"
+          if [ -n "$MISSING" ]; then
+            echo ""
+            echo "ERROR: The following GitHub Repository Variables are missing or empty:"
+            echo "  $MISSING"
+            echo ""
+            echo "Go to: Settings → Secrets and variables → Actions → Variables tab"
+            exit 1
+          fi
+
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
 
