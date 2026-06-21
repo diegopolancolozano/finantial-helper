@@ -1,22 +1,10 @@
-import {
-  Controller,
-  Post,
-  Body,
-  Res,
-  Req,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Post, Body, Res, Req, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import {
-  CurrentUser,
-  type JwtPayload,
-} from '../common/decorators/current-user.decorator';
+import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator';
 
 const REFRESH_COOKIE = 'refresh_token';
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -60,10 +48,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
-  async logout(
-    @CurrentUser() user: JwtPayload,
-    @Res({ passthrough: true }) res: Response,
-  ) {
+  async logout(@CurrentUser() user: JwtPayload, @Res({ passthrough: true }) res: Response) {
     await this.authService.logout(user.sub);
     res.clearCookie(REFRESH_COOKIE);
     return { message: 'Sesión cerrada' };

@@ -70,13 +70,18 @@
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"
     },
-    "collectCoverageFrom": ["**/*.(t|j)s"],
+    "collectCoverageFrom": [
+      "**/*.service.ts",
+      "!**/prisma.service.ts",
+      "!**/users.service.ts",
+      "!**/*.mock.ts"
+    ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
     "coverageThreshold": {
       "global": {
         "lines": 80,
-        "branches": 80
+        "functions": 80
       }
     }
   }

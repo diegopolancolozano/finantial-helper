@@ -37,7 +37,16 @@ export class MovementsService {
   }
 
   async findAll(userId: string, filters: FilterMovementsDto) {
-    const { type, categoryId, dateFrom, dateTo, page = 1, limit = 20, sortBy = 'date', order = 'desc' } = filters;
+    const {
+      type,
+      categoryId,
+      dateFrom,
+      dateTo,
+      page = 1,
+      limit = 20,
+      sortBy = 'date',
+      order = 'desc',
+    } = filters;
 
     const where: Prisma.MovementWhereInput = {
       userId,

@@ -13,10 +13,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import {
-  CurrentUser,
-  type JwtPayload,
-} from '../common/decorators/current-user.decorator';
+import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator';
 import { MovementsService } from './movements.service';
 import { CreateMovementDto } from './dto/create-movement.dto';
 import { UpdateMovementDto } from './dto/update-movement.dto';
@@ -43,10 +40,7 @@ export class MovementsController {
   }
 
   @Get(':id')
-  findOne(
-    @CurrentUser() user: JwtPayload,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  findOne(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.movementsService.findOne(user.sub, id);
   }
 
@@ -61,10 +55,7 @@ export class MovementsController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(
-    @CurrentUser() user: JwtPayload,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  remove(@CurrentUser() user: JwtPayload, @Param('id', ParseUUIDPipe) id: string) {
     return this.movementsService.remove(user.sub, id);
   }
 }

@@ -62,7 +62,14 @@ describe('MovementsService', () => {
     });
 
     it('should return budgetAlert when threshold is exceeded', async () => {
-      const alert = { level: 'warning', percentage: 84, categoryName: 'Alimentación', categoryId: CAT_ID, budgetAmount: 500000, spentAmount: 420000 };
+      const alert = {
+        level: 'warning',
+        percentage: 84,
+        categoryName: 'Alimentación',
+        categoryId: CAT_ID,
+        budgetAmount: 500000,
+        spentAmount: 420000,
+      };
       mockPrisma.movement.create.mockResolvedValue(mockMovement);
       mockBudgetsService.checkAlert.mockResolvedValue(alert);
 

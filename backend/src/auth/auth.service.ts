@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  UnauthorizedException,
-  ConflictException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
@@ -51,8 +47,7 @@ export class AuthService {
 
   async refresh(userId: string, rawRefreshToken: string) {
     const user = await this.usersService.findById(userId);
-    if (!user?.refreshToken)
-      throw new UnauthorizedException('Sesión inválida');
+    if (!user?.refreshToken) throw new UnauthorizedException('Sesión inválida');
 
     const tokenValid = await bcrypt.compare(rawRefreshToken, user.refreshToken);
     if (!tokenValid) throw new UnauthorizedException('Sesión inválida');

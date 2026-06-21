@@ -1,12 +1,4 @@
-import {
-  IsEnum,
-  IsUUID,
-  IsDateString,
-  IsOptional,
-  IsInt,
-  Min,
-  Max,
-} from 'class-validator';
+import { IsEnum, IsUUID, IsDateString, IsOptional, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MovementType } from '@prisma/client';
 

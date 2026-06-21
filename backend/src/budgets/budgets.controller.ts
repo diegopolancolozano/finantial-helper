@@ -1,20 +1,8 @@
-import {
-  Controller,
-  Get,
-  Put,
-  Body,
-  Param,
-  ParseUUIDPipe,
-  Query,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Put, Body, Param, ParseUUIDPipe, Query, UseGuards } from '@nestjs/common';
 import { IsInt, IsOptional, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import {
-  CurrentUser,
-  type JwtPayload,
-} from '../common/decorators/current-user.decorator';
+import { CurrentUser, type JwtPayload } from '../common/decorators/current-user.decorator';
 import { BudgetsService } from './budgets.service';
 import { SetBudgetDto } from './dto/set-budget.dto';
 
