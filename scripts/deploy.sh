@@ -39,6 +39,7 @@ gcloud run deploy "$BACKEND_SERVICE" \
   --platform managed \
   --allow-unauthenticated \
   --port 8080 \
+  --service-account "cloudrun-runner@${PROJECT_ID}.iam.gserviceaccount.com" \
   --add-cloudsql-instances "$CLOUD_SQL_CONN" \
   --update-secrets="DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest" \
   --set-env-vars="NODE_ENV=production,JWT_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,BCRYPT_ROUNDS=12" \
@@ -59,6 +60,7 @@ gcloud run deploy "$FRONTEND_SERVICE" \
   --platform managed \
   --allow-unauthenticated \
   --port 3000 \
+  --service-account "cloudrun-runner@${PROJECT_ID}.iam.gserviceaccount.com" \
   --set-env-vars="NEXT_PUBLIC_API_URL=${BACKEND_URL}" \
   --quiet
 

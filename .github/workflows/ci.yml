@@ -197,6 +197,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --port 8080 \
+            --service-account cloudrun-runner@${PROJECT_ID}.iam.gserviceaccount.com \
             --add-cloudsql-instances $CLOUD_SQL_INSTANCE \
             --update-secrets="DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,JWT_REFRESH_SECRET=JWT_REFRESH_SECRET:latest" \
             --set-env-vars="NODE_ENV=production,JWT_EXPIRES_IN=15m,JWT_REFRESH_EXPIRES_IN=7d,BCRYPT_ROUNDS=12"
@@ -224,6 +225,7 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --port 3000 \
+            --service-account cloudrun-runner@${PROJECT_ID}.iam.gserviceaccount.com \
             --set-env-vars="NEXT_PUBLIC_API_URL=${{ steps.backend.outputs.url }}"
 
       - name: Update backend CORS with frontend URL

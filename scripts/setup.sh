@@ -79,8 +79,30 @@ create_or_update_secret "DATABASE_URL" "$DB_URL"
 create_or_update_secret "JWT_SECRET"   "$(openssl rand -hex 32)"
 create_or_update_secret "JWT_REFRESH_SECRET" "$(openssl rand -hex 32)"
 
-# ── Service Account ──────────────────────────────────────────────────────────
-echo "[5/6] Service Account para GitHub Actions..."
+# ── Service Account para Cloud Run ───────────────────────────────────────────
+# Cloud Run necesita su propia SA con acceso a Secret Manager y Cloud SQL.
+# (La SA de GitHub Actions solo se usa para desplegar, no para ejecutar el servicio.)
+echo "[5/7] Service Account para Cloud Run (cloudrun-runner)..."
+CR_SA_NAME="cloudrun-runner"
+CR_SA_EMAIL="${CR_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+
+gcloud iam service-accounts describe "$CR_SA_EMAIL" --quiet 2>/dev/null \
+  || gcloud iam service-accounts create "$CR_SA_NAME" \
+       --display-name="Cloud Run Service Account" \
+       --quiet
+
+for ROLE in \
+  roles/secretmanager.secretAccessor \
+  roles/cloudsql.client; do
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$CR_SA_EMAIL" \
+    --role="$ROLE" \
+    --condition=None \
+    --quiet
+done
+
+# ── Service Account para GitHub Actions ──────────────────────────────────────
+echo "[6/7] Service Account para GitHub Actions (${SA_NAME})..."
 gcloud iam service-accounts describe "$SA_EMAIL" --quiet 2>/dev/null \
   || gcloud iam service-accounts create "$SA_NAME" \
        --display-name="GitHub Actions Deployer" \
@@ -89,9 +111,7 @@ gcloud iam service-accounts describe "$SA_EMAIL" --quiet 2>/dev/null \
 for ROLE in \
   roles/run.admin \
   roles/artifactregistry.writer \
-  roles/iam.serviceAccountUser \
-  roles/cloudsql.client \
-  roles/secretmanager.secretAccessor; do
+  roles/iam.serviceAccountUser; do
   gcloud projects add-iam-policy-binding "$PROJECT_ID" \
     --member="serviceAccount:$SA_EMAIL" \
     --role="$ROLE" \
@@ -100,7 +120,7 @@ for ROLE in \
 done
 
 # ── Clave JSON ───────────────────────────────────────────────────────────────
-echo "[6/6] Generando clave JSON..."
+echo "[7/7] Generando clave JSON..."
 KEY_FILE="$SCRIPT_DIR/../gcp-key.json"
 gcloud iam service-accounts keys create "$KEY_FILE" \
   --iam-account="$SA_EMAIL" --quiet
