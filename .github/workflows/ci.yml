@@ -231,6 +231,17 @@ jobs:
       - name: Configure Docker for Artifact Registry
         run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
 
+      - name: Ensure Artifact Registry repo exists
+        run: |
+          REPO_NAME=${AR_REPO##*/}
+          gcloud artifacts repositories describe ${REPO_NAME} \
+            --location ${REGION} --project ${PROJECT_ID} --quiet 2>/dev/null || \
+          gcloud artifacts repositories create ${REPO_NAME} \
+            --repository-format docker \
+            --location ${REGION} \
+            --project ${PROJECT_ID} \
+            --quiet
+
       # ── Backend ──────────────────────────────────────────────
       - name: Build & push backend image
         run: |

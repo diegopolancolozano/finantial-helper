@@ -26,11 +26,13 @@ echo
 
 gcloud config set project "$PROJECT_ID"
 
-# Pre-flight: verificar que el Artifact Registry exista (requiere haber corrido setup.sh)
+# Artifact Registry — crear si no existe (idempotente)
 if ! gcloud artifacts repositories describe "$AR_REPO" --location="$REGION" --quiet 2>/dev/null; then
-  echo "ERROR: El repositorio de Artifact Registry '$AR_REPO' no existe."
-  echo "  Corré primero: bash scripts/setup.sh"
-  exit 1
+  echo "Artifact Registry '$AR_REPO' no encontrado, creando..."
+  gcloud artifacts repositories create "$AR_REPO" \
+    --repository-format docker \
+    --location "$REGION" \
+    --quiet
 fi
 
 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
