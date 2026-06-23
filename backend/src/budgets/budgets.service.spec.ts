@@ -114,8 +114,9 @@ describe('BudgetsService', () => {
   });
 
   describe('getStatus', () => {
-    it('should return budget status for all categories', async () => {
+    it('should return budget status for categories with expense movements', async () => {
       mockPrisma.budget.findMany.mockResolvedValue([mockBudget]);
+      mockPrisma.movement.count.mockResolvedValue(3);
       mockPrisma.movement.aggregate.mockResolvedValue({
         _sum: { amount: new Decimal(250000) },
       });
@@ -126,6 +127,15 @@ describe('BudgetsService', () => {
       expect(result[0].categoryName).toBe('Alimentación');
       expect(result[0].percentage).toBe(50);
       expect(result[0].status).toBe('ok');
+    });
+
+    it('should exclude categories that only have income movements', async () => {
+      mockPrisma.budget.findMany.mockResolvedValue([mockBudget]);
+      mockPrisma.movement.count.mockResolvedValue(0);
+
+      const result = await service.getStatus(USER_ID, 6, 2026);
+
+      expect(result).toHaveLength(0);
     });
   });
 });

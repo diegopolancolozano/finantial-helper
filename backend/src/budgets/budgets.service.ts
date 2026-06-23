@@ -43,6 +43,11 @@ export class BudgetsService {
 
     const results = await Promise.all(
       budgets.map(async (budget) => {
+        const hasExpenses = await this.prisma.movement.count({
+          where: { userId, categoryId: budget.categoryId, type: 'expense' },
+        });
+        if (!hasExpenses) return null;
+
         const spent = await this.getSpentAmount(userId, budget.categoryId, month, year);
         const budgetAmount = Number(budget.amount);
         const percentage = budgetAmount > 0 ? Math.round((spent / budgetAmount) * 100) : 0;
@@ -58,7 +63,7 @@ export class BudgetsService {
       }),
     );
 
-    return results;
+    return results.filter((r) => r !== null);
   }
 
   async checkAlert(
