@@ -54,22 +54,36 @@ export default function DashboardPage() {
               <div key={b.categoryId}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                   <span style={{ fontWeight: 500 }}>{b.categoryName}</span>
-                  <span style={{ fontSize: 12, color: '#6b7280' }}>
-                    {fmt(b.spentAmount)} / {fmt(b.budgetAmount)} · {b.percentage}%
-                  </span>
+                  {b.hasOnlyIncome ? (
+                    <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>
+                      Ingresos: {fmt(b.incomeAmount)}
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 12, color: '#6b7280' }}>
+                      {fmt(b.spentAmount)} / {fmt(b.budgetAmount)} · {b.percentage}%
+                    </span>
+                  )}
                 </div>
-                <div style={{ height: 8, background: '#e5e7eb', borderRadius: 99 }}>
-                  <div style={{
-                    height: '100%', borderRadius: 99,
-                    width: `${Math.min(b.percentage, 100)}%`,
-                    background: b.status === 'exceeded' ? '#dc2626' : b.status === 'warning' ? '#f59e0b' : '#16a34a',
-                    transition: 'width 0.3s',
-                  }} />
-                </div>
-                {b.status !== 'ok' && (
-                  <p style={{ fontSize: 12, marginTop: 2, color: b.status === 'exceeded' ? '#dc2626' : '#d97706' }}>
-                    {b.status === 'exceeded' ? '⚠ Presupuesto excedido' : '⚠ Cerca del límite (>80%)'}
+                {b.hasOnlyIncome ? (
+                  <p style={{ fontSize: 11, color: '#6b7280', margin: 0 }}>
+                    Solo ingresos registrados — los gastos reducen este presupuesto
                   </p>
+                ) : (
+                  <>
+                    <div style={{ height: 8, background: '#e5e7eb', borderRadius: 99 }}>
+                      <div style={{
+                        height: '100%', borderRadius: 99,
+                        width: `${Math.min(b.percentage, 100)}%`,
+                        background: b.status === 'exceeded' ? '#dc2626' : b.status === 'warning' ? '#f59e0b' : '#16a34a',
+                        transition: 'width 0.3s',
+                      }} />
+                    </div>
+                    {b.status !== 'ok' && (
+                      <p style={{ fontSize: 12, marginTop: 2, color: b.status === 'exceeded' ? '#dc2626' : '#d97706' }}>
+                        {b.status === 'exceeded' ? '⚠ Presupuesto excedido' : '⚠ Cerca del límite (>80%)'}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             ))}

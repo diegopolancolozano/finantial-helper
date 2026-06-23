@@ -46,9 +46,9 @@ export class BudgetsService {
         const hasExpenses = await this.prisma.movement.count({
           where: { userId, categoryId: budget.categoryId, type: 'expense' },
         });
-        if (!hasExpenses) return null;
 
         const spent = await this.getSpentAmount(userId, budget.categoryId, month, year);
+        const incomeAmount = await this.getIncomeAmount(userId, budget.categoryId, month, year);
         const budgetAmount = Number(budget.amount);
         const percentage = budgetAmount > 0 ? Math.round((spent / budgetAmount) * 100) : 0;
 
@@ -57,13 +57,15 @@ export class BudgetsService {
           categoryName: budget.category.name,
           budgetAmount,
           spentAmount: spent,
+          incomeAmount,
+          hasOnlyIncome: !hasExpenses && incomeAmount > 0,
           percentage,
           status: this.resolveStatus(percentage),
         };
       }),
     );
 
-    return results.filter((r) => r !== null);
+    return results;
   }
 
   async checkAlert(
@@ -92,6 +94,28 @@ export class BudgetsService {
       percentage,
       level: percentage >= 100 ? 'exceeded' : 'warning',
     };
+  }
+
+  private async getIncomeAmount(
+    userId: string,
+    categoryId: string,
+    month: number,
+    year: number,
+  ): Promise<number> {
+    const from = new Date(year, month - 1, 1);
+    const to = new Date(year, month, 1);
+
+    const result = await this.prisma.movement.aggregate({
+      where: {
+        userId,
+        categoryId,
+        type: 'income',
+        date: { gte: from, lt: to },
+      },
+      _sum: { amount: true },
+    });
+
+    return Number((result._sum.amount as Decimal | null) ?? 0);
   }
 
   private async getSpentAmount(

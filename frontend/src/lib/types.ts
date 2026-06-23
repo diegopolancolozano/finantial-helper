@@ -36,6 +36,8 @@ export interface BudgetStatus {
   categoryName: string;
   budgetAmount: number;
   spentAmount: number;
+  incomeAmount: number;
+  hasOnlyIncome: boolean;
   percentage: number;
   status: 'ok' | 'warning' | 'exceeded';
 }

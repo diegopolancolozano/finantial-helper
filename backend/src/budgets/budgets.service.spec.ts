@@ -114,7 +114,7 @@ describe('BudgetsService', () => {
   });
 
   describe('getStatus', () => {
-    it('should return budget status for categories with expense movements', async () => {
+    it('should return budget status with expense data', async () => {
       mockPrisma.budget.findMany.mockResolvedValue([mockBudget]);
       mockPrisma.movement.count.mockResolvedValue(3);
       mockPrisma.movement.aggregate.mockResolvedValue({
@@ -127,15 +127,22 @@ describe('BudgetsService', () => {
       expect(result[0].categoryName).toBe('Alimentación');
       expect(result[0].percentage).toBe(50);
       expect(result[0].status).toBe('ok');
+      expect(result[0].hasOnlyIncome).toBe(false);
     });
 
-    it('should exclude categories that only have income movements', async () => {
+    it('should flag income-only categories instead of hiding them', async () => {
       mockPrisma.budget.findMany.mockResolvedValue([mockBudget]);
       mockPrisma.movement.count.mockResolvedValue(0);
+      mockPrisma.movement.aggregate
+        .mockResolvedValueOnce({ _sum: { amount: new Decimal(0) } })
+        .mockResolvedValueOnce({ _sum: { amount: new Decimal(1200000) } });
 
       const result = await service.getStatus(USER_ID, 6, 2026);
 
-      expect(result).toHaveLength(0);
+      expect(result).toHaveLength(1);
+      expect(result[0].hasOnlyIncome).toBe(true);
+      expect(result[0].incomeAmount).toBe(1200000);
+      expect(result[0].spentAmount).toBe(0);
     });
   });
 });
