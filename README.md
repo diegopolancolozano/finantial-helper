@@ -2,6 +2,9 @@
 
 Módulo de gestión de movimientos financieros personales desarrollado como prueba técnica para una fintech colombiana. El producto está orientado a un contexto MVP real: código listo para revisión de pares, análisis de calidad automatizado y despliegue continuo en la nube.
 
+**Repositorio**: https://github.com/diegopolancolozano/finantial-helper  
+**Última ejecución exitosa del pipeline CI/CD**: https://github.com/diegopolancolozano/finantial-helper/actions/runs/28000739023/job/82872515144
+
 ## Aplicación desplegada
 
 | Servicio | URL |
