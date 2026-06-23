@@ -6,8 +6,8 @@ Módulo de gestión de movimientos financieros personales desarrollado como prue
 
 | Servicio | URL |
 |---------|-----|
-| **Frontend** | _URL generada por el pipeline — ver última ejecución del job `Deploy` en GitHub Actions_ |
-| **Backend API** | _URL generada por el pipeline — ver última ejecución del job `Deploy` en GitHub Actions_ |
+| **Frontend** | https://financial-helper-frontend-agzh5otcaq-uc.a.run.app |
+| **Backend API** | https://financial-helper-backend-agzh5otcaq-uc.a.run.app/api |
 
 > El step **Print deployment URLs** al final del job `Deploy` imprime ambas URLs en el log de GitHub Actions. Para desplegar desde cero: `bash scripts/setup.sh` → push a `main` activa el pipeline automáticamente, o `bash scripts/deploy.sh` para deploy manual. Ver sección [Despliegue en GCP](#despliegue-en-gcp-cloud-run).
 
@@ -532,32 +532,71 @@ Los índices compuestos en `Movement` aceleran las dos consultas más frecuentes
 
 **Claude Code (claude-sonnet-4-6)** — asistente de desarrollo en todas las fases del proyecto.
 
-### Uso representativo
+### Problemas resueltos con asistencia de IA
 
-**Arquitectura de autenticación**
+---
 
-*Prompt*: "¿Cómo implemento la invalidación de refresh tokens en NestJS con Prisma de forma segura?"
+**`Cannot find module '/app/dist/main'` — incompatibilidad de Bun con `tsc`**
 
-*Resultado*: Claude propuso almacenar el hash bcrypt del refresh token en la base de datos y compararlo en cada renovación. Se adoptó este enfoque porque es más robusto que una blocklist en memoria (no escala entre instancias ni persiste entre reinicios).
+El Dockerfile original usaba `oven/bun:1.2` en el stage `builder` y ejecutaba `nest build`. En producción el contenedor fallaba al arrancar con el error anterior. Claude diagnosticó dos causas encadenadas: primero, Bun intercepta la ejecución de binarios de Node.js y `tsc` producía output vacío o en rutas inesperadas; segundo, sin `rootDir` explícito en `tsconfig.build.json`, TypeScript infería la raíz como `.` (en lugar de `src/`) porque `prisma/seed.ts` estaba incluido implícitamente, lo que hacía que el resultado fuera `dist/src/main.js` en vez de `dist/main.js`.
 
-**Generación de tests unitarios**
+*Solución adoptada*: cambiar el stage `builder` a `node:22-slim` para que `tsc` corra bajo Node.js real, agregar `"rootDir": "src"` y excluir `"prisma"` en `tsconfig.build.json`. Se añadió además una guardia en el Dockerfile: `RUN test -f dist/main.js || (echo "BUILD FAILED" && exit 1)` para detectar el problema en build time y no en runtime.
 
-*Prompt*: "Genera tests para MovementsService cubriendo paginación, filtros por tipo y fecha, y el flujo de alerta de presupuesto."
+---
 
-*Resultado*: Claude generó los mocks de Prisma y los 10 casos de prueba. Se revisó cada aserción contra la implementación real y se ajustaron los valores esperados de `totalExpense` y `balance` en `getSummary` para reflejar el tipo `Decimal` de Prisma.
+**`Cannot find module '@prisma/client'` / crash silencioso — incompatibilidad de binarios Prisma con Alpine**
 
-**Corrección de bugs de CI**
+El stage `runner` usaba `node:22-alpine`. Prisma genera binarios nativos ligados a glibc (Debian/Ubuntu); Alpine usa musl libc, que es incompatible. El contenedor arrancaba, pasaba el health check, pero crasheaba en la primera query a la base de datos sin un mensaje de error claro.
 
-*Prompt (implícito)*: "ESLint no encuentra config, test:cov sale con código 1, Can't find root directory."
+*Solución adoptada*: cambiar a `node:22-slim` (Debian slim, misma libc que `oven/bun:1.2`). Además instalar `openssl` con `apt-get` en los stages `builder` y `runner` porque el Prisma Query Engine lo requiere en runtime.
 
-*Resultado*: Claude diagnosticó tres problemas independientes: falta del flat config de ESLint 9, `collectCoverageFrom` demasiado amplio (incluía módulos y DTOs sin tests), y `rootDir` del `jest-e2e.json` apuntando al directorio del config en lugar del directorio raíz del backend.
+---
+
+**`Permission denied` en Secret Manager — Cloud Run usando la SA equivocada**
+
+El deploy funcionaba, pero todos los requests fallaban con 500. Los logs mostraban: `Permission denied on secret for Revision service account 702304288187-compute@developer.gserviceaccount.com`. Cloud Run estaba usando la Compute Engine default SA en vez de la SA de la aplicación.
+
+*Solución adoptada*: crear una SA dedicada `cloudrun-runner` con los roles `roles/secretmanager.secretAccessor` y `roles/cloudsql.client`, y agregar `--service-account cloudrun-runner@PROJECT.iam.gserviceaccount.com` a los comandos `gcloud run deploy`. Esto también corrigió el principio de mínimo privilegio: la SA de GitHub Actions (`github-deployer`) quedó solo con `roles/run.admin` y `roles/artifactregistry.writer`, sin acceso a secretos en runtime.
+
+---
+
+**`P1013: empty host in DATABASE_URL` — formato incorrecto para Cloud SQL**
+
+El `setup.sh` generaba la URL como `postgresql://user:pass@/db?host=/cloudsql/...` (host vacío). Prisma rechazaba la conexión con el error anterior. El problema es que libpq requiere un host no vacío aunque se use un socket Unix; Cloud SQL no es una excepción.
+
+*Solución adoptada*: cambiar el formato a `postgresql://user:pass@localhost/db?host=/cloudsql/PROJECT:REGION:INSTANCE`. El valor `localhost` es un placeholder que libpq acepta; el parámetro `host=` del query string sobreescribe el host de conexión real con el path del socket Unix del Cloud SQL connector.
+
+---
+
+**`rewrites()` de Next.js evaluado en build time — frontend apuntando a `localhost:8080` en producción**
+
+El frontend hacía `POST /api/auth/register` a través del proxy de Next.js y recibía 500. El backend directo respondía correctamente. La causa: `next.config.ts` usa `process.env.NEXT_PUBLIC_API_URL` en la función `rewrites()`, que Next.js evalúa al ejecutar `next build` para generar el `routes-manifest.json`. Como el Docker build en CI no tenía ese env var, la URL quedaba hardcodeada como `http://localhost:8080` en el artefacto compilado. El env var que Cloud Run inyecta en runtime llega demasiado tarde — el manifest ya está baked.
+
+*Solución adoptada*: pasar la URL del backend como `--build-arg NEXT_PUBLIC_API_URL=<url>` al `docker build` del frontend. Esto funciona porque en el pipeline CI, el backend ya está desplegado cuando se construye el frontend, por lo que la URL definitiva está disponible.
+
+---
+
+**Cloud SQL en `PENDING_CREATE` — `setup.sh` sin esperar RUNNABLE**
+
+Al interrumpir `setup.sh` durante la creación de la instancia Cloud SQL y volver a ejecutarlo, el script detectaba la instancia como "existente" (el `describe` retornaba resultado), pasaba al siguiente paso e intentaba crear la base de datos inmediatamente, recibiendo `HTTPError 400: Invalid request since instance is not running`.
+
+*Solución adoptada*: agregar un loop de polling después del bloque de creación de instancia:
+
+```bash
+while true; do
+  STATE=$(gcloud sql instances describe "$DB_INSTANCE" --format='value(state)' --quiet 2>/dev/null)
+  [ "$STATE" = "RUNNABLE" ] && break
+  echo "  Estado: ${STATE} — reintentando en 15s..."
+  sleep 15
+done
+```
 
 ### Sugerencia rechazada
 
-**Sugerencia**: usar `uuid` de Node.js para generar IDs en la aplicación antes de insertar en PostgreSQL.
+**Sugerencia**: usar `node:22-alpine` como imagen base de producción para reducir el tamaño de la imagen final (~50 MB menos que slim).
 
-**Decisión**: se rechazó en favor de `@default(uuid())` en Prisma (que delega a `gen_random_uuid()` de PostgreSQL). La razón es que delegar la generación de IDs a la base de datos garantiza unicidad incluso en inserción paralela desde múltiples instancias del backend, sin coordinación adicional.
+**Decisión**: rechazada. Alpine usa musl libc mientras que los binarios nativos de Prisma están compilados para glibc. El ahorro de tamaño no justifica el riesgo de incompatibilidad en runtime (fallo silencioso en la primera query). La imagen `node:22-slim` (Debian slim) mantiene un tamaño razonable y garantiza compatibilidad binaria con el ecosistema de Node.js en producción.
 
 ### Valoración
 
-Claude Code aceleró significativamente las fases repetitivas (boilerplate de módulos NestJS, configuración de CI, scripts de despliegue) y fue útil como segunda opinión en decisiones de seguridad. Sin embargo, cada pieza de código fue revisada contra el contexto específico del producto: por ejemplo, la cobertura de tests se ajustó para medir solo la lógica de negocio (servicios), no el código de cableado (módulos, DTOs), reflejando una decisión deliberada sobre qué vale la pena medir.
+El mayor aporte de Claude Code en este proyecto no fue en la generación de boilerplate sino en el diagnóstico de errores de infraestructura: incompatibilidades de binarios entre runtimes, timing de evaluación de configuración en frameworks (Next.js build time vs runtime), y la interacción entre Cloud SQL connector, libpq y Prisma. Estos problemas tienen síntomas confusos (un 500 genérico, un módulo no encontrado) cuya causa raíz está varias capas por debajo de donde aparece el error. La revisión humana fue especialmente importante en las decisiones de IAM (mínimo privilegio para los service accounts) y en validar que los tests de integración realmente probaran la lógica de negocio y no simplemente que Prisma puede conectarse.
