@@ -52,6 +52,14 @@ gcloud sql instances describe "$DB_INSTANCE" --quiet 2>/dev/null \
        --region="$REGION" \
        --quiet
 
+echo "  Esperando que Cloud SQL esté RUNNABLE..."
+while true; do
+  STATE=$(gcloud sql instances describe "$DB_INSTANCE" --format='value(state)' --quiet 2>/dev/null)
+  [ "$STATE" = "RUNNABLE" ] && break
+  echo "  Estado: ${STATE:-desconocido} — reintentando en 15s..."
+  sleep 15
+done
+
 gcloud sql databases describe "$DB_NAME" --instance="$DB_INSTANCE" --quiet 2>/dev/null \
   || gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE" --quiet
 
