@@ -60,7 +60,9 @@ BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" \
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 echo "[3/5] Build frontend..."
-docker build -t "$FRONTEND_IMAGE" "$ROOT_DIR/frontend"
+docker build -t "$FRONTEND_IMAGE" \
+  --build-arg NEXT_PUBLIC_API_URL="$BACKEND_URL" \
+  "$ROOT_DIR/frontend"
 docker push "$FRONTEND_IMAGE"
 
 echo "[4/5] Deploy frontend → Cloud Run..."
