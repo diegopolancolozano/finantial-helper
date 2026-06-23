@@ -6,10 +6,10 @@ Módulo de gestión de movimientos financieros personales desarrollado como prue
 
 | Servicio | URL |
 |---------|-----|
-| **Frontend** | https://financial-helper-frontend-agzh5otcaq-uc.a.run.app |
-| **Backend API** | https://financial-helper-backend-agzh5otcaq-uc.a.run.app/api |
+| **Frontend** | _URL generada por el pipeline — ver última ejecución del job `Deploy` en GitHub Actions_ |
+| **Backend API** | _URL generada por el pipeline — ver última ejecución del job `Deploy` en GitHub Actions_ |
 
-> Para desplegar desde cero: `bash scripts/setup.sh` → push a `main` activa el pipeline automáticamente, o `bash scripts/deploy.sh` para deploy manual. Ver sección [Despliegue en GCP](#despliegue-en-gcp-cloud-run).
+> El step **Print deployment URLs** al final del job `Deploy` imprime ambas URLs en el log de GitHub Actions. Para desplegar desde cero: `bash scripts/setup.sh` → push a `main` activa el pipeline automáticamente, o `bash scripts/deploy.sh` para deploy manual. Ver sección [Despliegue en GCP](#despliegue-en-gcp-cloud-run).
 
 ## Tabla de contenidos
 
@@ -278,13 +278,27 @@ cd backend && bun run test:cov
 
 Umbral mínimo de cobertura: **80% en líneas y funciones** medido únicamente sobre los archivos `*.service.ts` con tests asociados. Los módulos, controladores, DTOs y archivos de infraestructura están excluidos del umbral porque son código de cableado, no lógica de negocio.
 
-### Integración y E2E (contra base de datos real)
+### Integración (servicios contra base de datos real, sin HTTP)
+
+```bash
+cd backend && bun run test:integration
+```
+
+Los tests de integración instancian los servicios reales de NestJS (`AuthService`, `CategoriesService`, `MovementsService`) a través de `@nestjs/testing` con una base de datos PostgreSQL real, pero **sin levantar el servidor HTTP**. Verifican que la lógica de negocio y las queries de Prisma funcionan correctamente en conjunto:
+
+- `AuthService`: registro, login, duplicate email, logout (invalidación de token)
+- `CategoriesService`: create, findAll, soft delete, reactivación, acceso cruzado entre usuarios
+- `MovementsService`: create con budget alert, filtros por tipo y fecha, cálculo de balance
+
+Se ubican en `backend/test/integration/` y usan el sufijo `*.integration.spec.ts`.
+
+### E2E (stack HTTP completo contra base de datos real)
 
 ```bash
 cd backend && bun run test:e2e
 ```
 
-Los tests de integración/E2E usan `supertest` para ejercitar la API HTTP completa con una base de datos PostgreSQL real — esto verifica la integración entre controladores, servicios, guards de autenticación, validación de DTOs y la capa de persistencia de forma conjunta. El flujo cubre:
+Los tests E2E usan `supertest` para ejercitar la API a través del stack HTTP completo (middleware, guards, validación de DTOs, serialización). Cubren el flujo secuencial:
 
 1. Registro e inicio de sesión
 2. Rechazo de requests sin token (401)
@@ -293,9 +307,15 @@ Los tests de integración/E2E usan `supertest` para ejercitar la API HTTP comple
 5. Resumen de balance (ingresos - egresos)
 6. Logout e invalidación de refresh token
 
-**Distinción unitarios vs integración**: los tests unitarios verifican la lógica de negocio de cada servicio de forma aislada (mock de Prisma). Los tests de integración/E2E verifican el comportamiento del sistema completo incluyendo la base de datos real, asegurando que las consultas Prisma, las migraciones y la lógica de negocio funcionan correctamente en conjunto.
+**Diferencia entre capas de test:**
 
-En CI, el job `test-e2e` levanta un contenedor PostgreSQL 16 como servicio y ejecuta `prisma migrate deploy` antes de los tests, garantizando un entorno limpio en cada ejecución.
+| Tipo | Qué prueba | DB real | HTTP |
+|------|-----------|---------|------|
+| Unitario | Lógica de un servicio aislado | No (mock) | No |
+| Integración | Servicio + Prisma + DB | Sí | No |
+| E2E | Controlador + Guard + Servicio + DB | Sí | Sí |
+
+En CI, los jobs `test-integration` y `test-e2e` levantan contenedores PostgreSQL 16 independientes y ejecutan `prisma migrate deploy` antes de los tests, garantizando entornos limpios en cada ejecución.
 
 ---
 
@@ -306,26 +326,29 @@ El pipeline en `.github/workflows/ci.yml` se ejecuta en cada push a `main` y en 
 ```
 push a main / pull request
     │
-    ├── lint          ESLint 9 + Prettier sobre src/ y test/
+    ├── lint              ESLint 9 + Prettier sobre src/ y test/
     │
-    ├── test          Unit tests con cobertura (umbral 80%)
-    │   │             Artefacto: reporte HTML de cobertura
-    │   │
-    │   └── (paralelo con lint)
+    ├── test              Unit tests con cobertura (umbral 80%)
+    │                     Artefacto: reporte HTML de cobertura
     │
-    ├── test-e2e      PostgreSQL como service container
-    │                 prisma migrate deploy → 13 tests E2E
+    ├── test-integration  PostgreSQL como service container
+    │                     prisma migrate deploy → tests de integración
+    │                     (AuthService, CategoriesService, MovementsService)
     │
-    ├── build         bun run build (backend) + bunx next build (frontend)
-    │   needs: [lint, test]
+    ├── test-e2e          PostgreSQL como service container
+    │                     prisma migrate deploy → 13 tests E2E HTTP
     │
-    └── deploy        Solo en push a main (no en pull requests)
+    ├── build             bun run build (backend) + bun run build (frontend)
+    │   needs: [lint, test, test-integration, test-e2e]
+    │
+    └── deploy            Solo en push a main (no en pull requests)
         needs: [build]
         │
         ├── Build y push imágenes a Artifact Registry
         ├── Deploy backend → Cloud Run (con Cloud SQL connector)
         ├── Deploy frontend → Cloud Run (con URL del backend)
-        └── Actualiza CORS del backend con URL del frontend
+        ├── Actualiza CORS del backend con URL del frontend
+        └── Print deployment URLs (Frontend + Backend API)
 ```
 
 ### Variables y secretos de GitHub Actions requeridos
