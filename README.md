@@ -2,6 +2,15 @@
 
 Módulo de gestión de movimientos financieros personales desarrollado como prueba técnica para una fintech colombiana. El producto está orientado a un contexto MVP real: código listo para revisión de pares, análisis de calidad automatizado y despliegue continuo en la nube.
 
+## Aplicación desplegada
+
+| Servicio | URL |
+|---------|-----|
+| **Frontend** | https://financial-helper-frontend-agzh5otcaq-uc.a.run.app |
+| **Backend API** | https://financial-helper-backend-agzh5otcaq-uc.a.run.app/api |
+
+> Para desplegar desde cero: `bash scripts/setup.sh` → push a `main` activa el pipeline automáticamente, o `bash scripts/deploy.sh` para deploy manual. Ver sección [Despliegue en GCP](#despliegue-en-gcp-cloud-run).
+
 ## Tabla de contenidos
 
 - [Stack y justificación de decisiones](#stack-y-justificación-de-decisiones)
@@ -269,20 +278,22 @@ cd backend && bun run test:cov
 
 Umbral mínimo de cobertura: **80% en líneas y funciones** medido únicamente sobre los archivos `*.service.ts` con tests asociados. Los módulos, controladores, DTOs y archivos de infraestructura están excluidos del umbral porque son código de cableado, no lógica de negocio.
 
-### E2E (contra base de datos real)
+### Integración y E2E (contra base de datos real)
 
 ```bash
 cd backend && bun run test:e2e
 ```
 
-Los tests E2E usan `supertest` para ejercitar la API HTTP completa, incluyendo guards de autenticación, validación de DTOs y respuestas de error. El flujo cubre:
+Los tests de integración/E2E usan `supertest` para ejercitar la API HTTP completa con una base de datos PostgreSQL real — esto verifica la integración entre controladores, servicios, guards de autenticación, validación de DTOs y la capa de persistencia de forma conjunta. El flujo cubre:
 
 1. Registro e inicio de sesión
 2. Rechazo de requests sin token (401)
 3. CRUD de categorías con validación de conflictos
 4. Creación de movimientos y verificación de alertas de presupuesto
 5. Resumen de balance (ingresos - egresos)
-6. Logout
+6. Logout e invalidación de refresh token
+
+**Distinción unitarios vs integración**: los tests unitarios verifican la lógica de negocio de cada servicio de forma aislada (mock de Prisma). Los tests de integración/E2E verifican el comportamiento del sistema completo incluyendo la base de datos real, asegurando que las consultas Prisma, las migraciones y la lógica de negocio funcionan correctamente en conjunto.
 
 En CI, el job `test-e2e` levanta un contenedor PostgreSQL 16 como servicio y ejecuta `prisma migrate deploy` antes de los tests, garantizando un entorno limpio en cada ejecución.
 
@@ -308,7 +319,7 @@ push a main / pull request
     ├── build         bun run build (backend) + bunx next build (frontend)
     │   needs: [lint, test]
     │
-    └── deploy        Solo en push a main + vars.GCP_DEPLOY_ENABLED == 'true'
+    └── deploy        Solo en push a main (no en pull requests)
         needs: [build]
         │
         ├── Build y push imágenes a Artifact Registry
@@ -317,17 +328,24 @@ push a main / pull request
         └── Actualiza CORS del backend con URL del frontend
 ```
 
-### Secretos de GitHub Actions requeridos
+### Variables y secretos de GitHub Actions requeridos
 
-Configurar en `Settings → Secrets → Actions`:
+**Variables** (`Settings → Secrets and variables → Actions → Variables`):
+
+| Variable | Ejemplo |
+|----------|---------|
+| `GCP_PROJECT_ID` | `mi-proyecto-123` |
+| `GCP_REGION` | `us-central1` |
+| `GCP_AR_REPO` | `finantial-helper` |
+| `GCP_CLOUD_SQL_INSTANCE` | `mi-proyecto-123:us-central1:financial-helper-db` |
+
+**Secrets** (`Settings → Secrets and variables → Actions → Secrets`):
 
 | Secret | Descripción |
 |--------|-------------|
-| `GCP_PROJECT_ID` | ID del proyecto GCP |
-| `GCP_REGION` | Región (ej: `us-central1`) |
-| `GCP_SA_KEY` | JSON completo de la clave de servicio |
-| `GCP_AR_REPO` | Nombre del repo en Artifact Registry (ej: `finantial-helper`) |
-| `GCP_CLOUD_SQL_INSTANCE` | Conexión SQL (ej: `project:region:instance`) |
+| `GCP_SA_KEY` | Contenido completo del JSON de la service account (generado por `setup.sh`) |
+
+> **Importante**: `GCP_SA_KEY` debe estar en la pestaña **Secrets**, no en Variables. Los demás valores no son sensibles y van en **Variables**.
 
 ---
 

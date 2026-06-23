@@ -25,6 +25,14 @@ echo "Commit: $COMMIT | Región: $REGION"
 echo
 
 gcloud config set project "$PROJECT_ID"
+
+# Pre-flight: verificar que el Artifact Registry exista (requiere haber corrido setup.sh)
+if ! gcloud artifacts repositories describe "$AR_REPO" --location="$REGION" --quiet 2>/dev/null; then
+  echo "ERROR: El repositorio de Artifact Registry '$AR_REPO' no existe."
+  echo "  Corré primero: bash scripts/setup.sh"
+  exit 1
+fi
+
 gcloud auth configure-docker "${REGION}-docker.pkg.dev" --quiet
 
 # ── Backend ──────────────────────────────────────────────────────────────────
