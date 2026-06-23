@@ -40,9 +40,7 @@ describe('CategoriesService (integration)', () => {
 
   it('create — lanza ConflictException si ya existe una categoría activa con ese nombre', async () => {
     await service.create(userId, { name: 'Transporte' });
-    await expect(service.create(userId, { name: 'Transporte' })).rejects.toThrow(
-      ConflictException,
-    );
+    await expect(service.create(userId, { name: 'Transporte' })).rejects.toThrow(ConflictException);
   });
 
   it('findAll — devuelve solo categorías activas del usuario', async () => {
