@@ -6,7 +6,7 @@ RUN bun install --frozen-lockfile
 FROM node:22-slim AS builder
 WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl python3 make g++ && rm -rf /var/lib/apt/lists/*
-RUN npm install -g typescript prisma
+RUN npm install -g typescript@5 prisma@6
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN prisma generate
@@ -18,7 +18,7 @@ FROM node:22-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-RUN npm install -g prisma
+RUN npm install -g prisma@6
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/prisma ./prisma
