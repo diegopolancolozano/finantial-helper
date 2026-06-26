@@ -37,6 +37,7 @@ export class CategoriesService {
 
   async remove(userId: string, id: string) {
     await this.findOwnedOrFail(userId, id);
+    await this.prisma.budget.deleteMany({ where: { categoryId: id } });
     return this.prisma.category.update({
       where: { id },
       data: { isActive: false },

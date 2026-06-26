@@ -37,7 +37,7 @@ export class BudgetsService {
 
   async getStatus(userId: string, month: number, year: number) {
     const budgets = await this.prisma.budget.findMany({
-      where: { userId, month, year },
+      where: { userId, month, year, category: { isActive: true } },
       include: { category: true },
     });
 
