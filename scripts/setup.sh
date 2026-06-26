@@ -17,6 +17,8 @@ source "$ENV_FILE"
 CLOUD_SQL_CONN="${PROJECT_ID}:${REGION}:${DB_INSTANCE}"
 DB_URL="postgresql://${DB_USER}:${DB_PASS}@localhost/${DB_NAME}?host=/cloudsql/${CLOUD_SQL_CONN}"
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
+CR_SA_NAME="cloudrun-runner"
+CR_SA_EMAIL="${CR_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
 echo "=== Financial Helper — Setup en GCP ==="
 echo "Proyecto: $PROJECT_ID | Región: $REGION"
@@ -25,7 +27,7 @@ echo
 gcloud config set project "$PROJECT_ID"
 
 # ── APIs ────────────────────────────────────────────────────────────────────
-echo "[1/6] Habilitando APIs..."
+echo "[1/7] Habilitando APIs..."
 gcloud services enable \
   run.googleapis.com \
   sqladmin.googleapis.com \
@@ -33,8 +35,24 @@ gcloud services enable \
   secretmanager.googleapis.com \
   --quiet
 
+# ── Cloud SQL (async — tarda 5-10 min, se hacen otros pasos en paralelo) ──
+echo "[2/7] Cloud SQL (db-f1-micro Enterprise, PostgreSQL 16)..."
+if ! gcloud sql instances describe "$DB_INSTANCE" --quiet 2>/dev/null; then
+  echo "  Creando instancia (async)..."
+  gcloud sql instances create "$DB_INSTANCE" \
+    --database-version=POSTGRES_16 \
+    --tier=db-f1-micro \
+    --edition=ENTERPRISE \
+    --region="$REGION" \
+    --async \
+    --quiet
+  echo "  Creación iniciada — continuando con otros pasos mientras se provisiona..."
+else
+  echo "  Instancia ya existe."
+fi
+
 # ── Artifact Registry ────────────────────────────────────────────────────────
-echo "[2/6] Artifact Registry..."
+echo "[3/7] Artifact Registry..."
 gcloud artifacts repositories describe "$AR_REPO" \
   --location="$REGION" --quiet 2>/dev/null \
   || gcloud artifacts repositories create "$AR_REPO" \
@@ -42,35 +60,8 @@ gcloud artifacts repositories describe "$AR_REPO" \
        --location="$REGION" \
        --description="Financial Helper — imágenes Docker"
 
-# ── Cloud SQL ────────────────────────────────────────────────────────────────
-echo "[3/6] Cloud SQL (db-f1-micro Enterprise, PostgreSQL 16)..."
-gcloud sql instances describe "$DB_INSTANCE" --quiet 2>/dev/null \
-  || gcloud sql instances create "$DB_INSTANCE" \
-       --database-version=POSTGRES_16 \
-       --tier=db-f1-micro \
-       --edition=ENTERPRISE \
-       --region="$REGION" \
-       --quiet
-
-echo "  Esperando que Cloud SQL esté RUNNABLE..."
-while true; do
-  STATE=$(gcloud sql instances describe "$DB_INSTANCE" --format='value(state)' --quiet 2>/dev/null)
-  [ "$STATE" = "RUNNABLE" ] && break
-  echo "  Estado: ${STATE:-desconocido} — reintentando en 15s..."
-  sleep 15
-done
-
-gcloud sql databases describe "$DB_NAME" --instance="$DB_INSTANCE" --quiet 2>/dev/null \
-  || gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE" --quiet
-
-gcloud sql users describe "$DB_USER" --instance="$DB_INSTANCE" --quiet 2>/dev/null \
-  || gcloud sql users create "$DB_USER" \
-       --instance="$DB_INSTANCE" \
-       --password="$DB_PASS" \
-       --quiet
-
 # ── Secret Manager ───────────────────────────────────────────────────────────
-echo "[4/6] Secrets..."
+echo "[4/7] Secrets..."
 
 create_or_update_secret() {
   local NAME="$1"
@@ -88,12 +79,7 @@ create_or_update_secret "JWT_SECRET"   "$(openssl rand -hex 32)"
 create_or_update_secret "JWT_REFRESH_SECRET" "$(openssl rand -hex 32)"
 
 # ── Service Account para Cloud Run ───────────────────────────────────────────
-# Cloud Run necesita su propia SA con acceso a Secret Manager y Cloud SQL.
-# (La SA de GitHub Actions solo se usa para desplegar, no para ejecutar el servicio.)
 echo "[5/7] Service Account para Cloud Run (cloudrun-runner)..."
-CR_SA_NAME="cloudrun-runner"
-CR_SA_EMAIL="${CR_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-
 gcloud iam service-accounts describe "$CR_SA_EMAIL" --quiet 2>/dev/null \
   || gcloud iam service-accounts create "$CR_SA_NAME" \
        --display-name="Cloud Run Service Account" \
@@ -127,8 +113,26 @@ for ROLE in \
     --quiet
 done
 
+# ── Esperar Cloud SQL ────────────────────────────────────────────────────────
+echo "[7/7] Esperando que Cloud SQL esté RUNNABLE..."
+while true; do
+  STATE=$(gcloud sql instances describe "$DB_INSTANCE" --format='value(state)' --quiet 2>/dev/null)
+  [ "$STATE" = "RUNNABLE" ] && break
+  echo "  Estado: ${STATE:-desconocido} — reintentando en 15s..."
+  sleep 15
+done
+
+echo "  Creando base de datos y usuario..."
+gcloud sql databases describe "$DB_NAME" --instance="$DB_INSTANCE" --quiet 2>/dev/null \
+  || gcloud sql databases create "$DB_NAME" --instance="$DB_INSTANCE" --quiet
+
+gcloud sql users describe "$DB_USER" --instance="$DB_INSTANCE" --quiet 2>/dev/null \
+  || gcloud sql users create "$DB_USER" \
+       --instance="$DB_INSTANCE" \
+       --password="$DB_PASS" \
+       --quiet
+
 # ── Clave JSON ───────────────────────────────────────────────────────────────
-echo "[7/7] Generando clave JSON..."
 KEY_FILE="$SCRIPT_DIR/../gcp-key.json"
 gcloud iam service-accounts keys create "$KEY_FILE" \
   --iam-account="$SA_EMAIL" --quiet
