@@ -35,21 +35,15 @@ gcloud services enable \
   secretmanager.googleapis.com \
   --quiet
 
-# ── Cloud SQL (async — tarda 5-10 min, se hacen otros pasos en paralelo) ──
+# ── Cloud SQL (tarda 5-10 min — es tiempo de provisión de GCP) ────────────
 echo "[2/7] Cloud SQL (db-f1-micro Enterprise, PostgreSQL 16)..."
-if ! gcloud sql instances describe "$DB_INSTANCE" --quiet 2>/dev/null; then
-  echo "  Creando instancia (async)..."
-  gcloud sql instances create "$DB_INSTANCE" \
-    --database-version=POSTGRES_16 \
-    --tier=db-f1-micro \
-    --edition=ENTERPRISE \
-    --region="$REGION" \
-    --async \
-    --quiet
-  echo "  Creación iniciada — continuando con otros pasos mientras se provisiona..."
-else
-  echo "  Instancia ya existe."
-fi
+gcloud sql instances describe "$DB_INSTANCE" --quiet 2>/dev/null \
+  || gcloud sql instances create "$DB_INSTANCE" \
+       --database-version=POSTGRES_16 \
+       --tier=db-f1-micro \
+       --edition=ENTERPRISE \
+       --region="$REGION" \
+       --quiet
 
 # ── Artifact Registry ────────────────────────────────────────────────────────
 echo "[3/7] Artifact Registry..."
