@@ -8,9 +8,9 @@ WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN node_modules/.bin/prisma generate
-RUN node_modules/.bin/tsc -p tsconfig.build.json
-RUN test -f dist/main.js || (echo "BUILD FAILED: dist/main.js not found" && find /app/dist -name "*.js" 2>/dev/null | head -20 && exit 1)
+RUN ./node_modules/.bin/prisma generate
+RUN npx tsc -p tsconfig.build.json --listEmittedFiles
+RUN test -f dist/main.js || (echo "BUILD FAILED: dist/main.js not found" && ls -la dist/ 2>/dev/null && exit 1)
 RUN npm rebuild bcrypt --update-binary
 
 FROM node:22-slim AS runner
