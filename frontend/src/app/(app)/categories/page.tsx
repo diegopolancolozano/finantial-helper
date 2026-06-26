@@ -120,21 +120,30 @@ export default function CategoriesPage() {
               {/* Budget bar */}
               {bud && (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Gastado: {fmt(bud.spentAmount)}</span>
-                    <span style={{ fontSize: 12, color: '#6b7280' }}>Presupuesto: {fmt(bud.budgetAmount)} · {bud.percentage}%</span>
-                  </div>
-                  <div style={{ height: 6, background: '#e5e7eb', borderRadius: 99 }}>
-                    <div style={{
-                      height: '100%', borderRadius: 99,
-                      width: `${Math.min(bud.percentage, 100)}%`,
-                      background: bud.status === 'exceeded' ? '#dc2626' : bud.status === 'warning' ? '#f59e0b' : '#16a34a',
-                    }} />
-                  </div>
-                  {bud.status !== 'ok' && (
-                    <p style={{ fontSize: 11, color: bud.status === 'exceeded' ? '#dc2626' : '#d97706', marginTop: 2 }}>
-                      {bud.status === 'exceeded' ? '⚠ Excedido' : '⚠ Cerca del límite'}
-                    </p>
+                  {bud.hasOnlyIncome ? (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: 12, color: '#16a34a', fontWeight: 500 }}>Ingresos: {fmt(bud.incomeAmount)}</span>
+                      <span style={{ fontSize: 12, color: '#6b7280' }}>Presupuesto: {fmt(bud.budgetAmount)}</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>Gastado: {fmt(bud.spentAmount)}</span>
+                        <span style={{ fontSize: 12, color: '#6b7280' }}>Presupuesto: {fmt(bud.budgetAmount)} · {bud.percentage}%</span>
+                      </div>
+                      <div style={{ height: 6, background: '#e5e7eb', borderRadius: 99 }}>
+                        <div style={{
+                          height: '100%', borderRadius: 99,
+                          width: `${Math.min(bud.percentage, 100)}%`,
+                          background: bud.status === 'exceeded' ? '#dc2626' : bud.status === 'warning' ? '#f59e0b' : '#16a34a',
+                        }} />
+                      </div>
+                      {bud.status !== 'ok' && (
+                        <p style={{ fontSize: 11, color: bud.status === 'exceeded' ? '#dc2626' : '#d97706', marginTop: 2 }}>
+                          {bud.status === 'exceeded' ? '⚠ Excedido' : '⚠ Cerca del límite'}
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               )}
